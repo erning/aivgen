@@ -74,3 +74,17 @@ Commands:
 
 - Keep tests unit-level by default.
 - Avoid real network calls; use fake clients/stubs.
+
+## Type Checking
+
+We use `basedpyright` for type checking.
+
+```bash
+uv run basedpyright
+```
+
+Current policy (to keep signal high in an early-stage, dynamic-config CLI):
+- `tests/` is excluded from type checking.
+- `src/aivgen/config.py` is excluded (config is intentionally untyped/dynamic).
+- Typer parameter default initializers are allowed (`reportCallInDefaultInitializer = none`).
+- Explicit `Any` is allowed at boundaries (`reportExplicitAny = none`).

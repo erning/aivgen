@@ -1,6 +1,18 @@
 {
   "venvPath": ".",
   "venv": ".venv",
+  "typeCheckingMode": "standard",
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    ".venv",
+    "tests",
+    "prompts",
+    "src/aivgen/config.py"
+  ],
+  "reportCallInDefaultInitializer": "none",
+  "reportExplicitAny": "none",
   "executionEnvironments": [
     {
       "root": "src"

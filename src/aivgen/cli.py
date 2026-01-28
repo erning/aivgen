@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 import typer
 from rich.console import Console
@@ -148,15 +148,15 @@ def _extract_model_ids(models: object) -> list[str]:
 def _extract_chat_content(resp: object) -> str:
     # OpenAI SDK returns a typed object. Keep this function forgiving so
     # provider implementations can vary while CLI remains stable.
-    try:
-        choices = resp.choices  # type: ignore[attr-defined]
-        choice0 = choices[0]
-        msg = choice0.message  # type: ignore[attr-defined]
-        content = msg.content  # type: ignore[attr-defined]
-        if isinstance(content, str):
-            return content
-    except Exception:  # noqa: BLE001
-        pass
+    if hasattr(resp, "choices"):
+        try:
+            r = cast(Any, resp)
+            choice0 = r.choices[0]
+            content = choice0.message.content
+            if isinstance(content, str):
+                return content
+        except Exception:  # noqa: BLE001
+            pass
 
     if isinstance(resp, dict):
         try:
