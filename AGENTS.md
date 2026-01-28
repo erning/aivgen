@@ -5,6 +5,7 @@ This repo is intentionally early-stage. Keep changes small, typed, and testable.
 ## Ground Rules
 
 - Do not commit secrets. Never add `.env` or API keys to git.
+- Do not add commit trailers for coding agents (e.g. `Co-authored-by: ...`, "Ultraworked with ...").
 - Prefer minimal, explicit abstractions over broad frameworks.
 - Keep config loading dumb: parse/merge/interpolate only. Validate provider-specific requirements inside provider implementations.
 
