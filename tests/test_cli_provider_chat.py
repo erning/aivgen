@@ -151,6 +151,81 @@ def test_provider_chat_prompt_from_stdin(monkeypatch) -> None:  # noqa: ANN001
     assert fake.seen["messages"] == [{"role": "user", "content": "from-stdin"}]
 
 
+def test_provider_chat_stdin_only_once_across_args(monkeypatch) -> None:  # noqa: ANN001
+    fake = _FakeProvider()
+
+    def fake_load_config(*, config_path=None, cwd=None):  # noqa: ANN001
+        return object()
+
+    def fake_build_provider(cfg, *, name: str):  # noqa: ANN001
+        class _Ref:
+            provider = fake
+
+        return _Ref()
+
+    monkeypatch.setattr(cli, "load_config", fake_load_config)
+    monkeypatch.setattr(cli, "build_provider", fake_build_provider)
+
+    res = runner.invoke(
+        cli.app,
+        [
+            "provider",
+            "chat",
+            "--provider",
+            "zhipu",
+            "--model",
+            "glm-4",
+            "--system-prompt",
+            "-",
+            "--prompt",
+            "-",
+        ],
+        input="stdin",
+    )
+
+    assert res.exit_code != 0
+    assert "stdin (-) can only be used once" in res.stdout
+
+
+def test_provider_chat_system_prompt_from_stdin(monkeypatch) -> None:  # noqa: ANN001
+    fake = _FakeProvider()
+
+    def fake_load_config(*, config_path=None, cwd=None):  # noqa: ANN001
+        return object()
+
+    def fake_build_provider(cfg, *, name: str):  # noqa: ANN001
+        class _Ref:
+            provider = fake
+
+        return _Ref()
+
+    monkeypatch.setattr(cli, "load_config", fake_load_config)
+    monkeypatch.setattr(cli, "build_provider", fake_build_provider)
+
+    res = runner.invoke(
+        cli.app,
+        [
+            "provider",
+            "chat",
+            "--provider",
+            "zhipu",
+            "--model",
+            "glm-4",
+            "--system-prompt",
+            "-",
+            "--prompt",
+            "user",
+        ],
+        input="system",
+    )
+
+    assert res.exit_code == 0, res.stdout
+    assert fake.seen["messages"] == [
+        {"role": "system", "content": "system"},
+        {"role": "user", "content": "user"},
+    ]
+
+
 def test_provider_chat_accepts_local_images(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
     fake = _FakeProvider()
 

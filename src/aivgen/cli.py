@@ -73,6 +73,14 @@ def provider_chat(
         "--prompt",
         help="Prompt text. Repeat the flag to append multiple prompts.",
     ),
+    system_prompt: list[str] = typer.Option(
+        [],
+        "--system-prompt",
+        help=(
+            "System prompt text. Supports @file and -. "
+            "Repeat the flag to append multiple chunks."
+        ),
+    ),
     image: list[str] = typer.Option(
         [],
         "--image",
@@ -97,18 +105,26 @@ def provider_chat(
         raise typer.Exit(code=_print_error(str(e))) from e
 
     try:
-        prompt_chunks = _resolve_prompts(prompt)
+        stdin_state: dict[str, Any] = {"used": False, "text": ""}
+
+        system_chunks = _resolve_prompts(system_prompt, stdin_state)
+        prompt_chunks = _resolve_prompts(prompt, stdin_state)
+        system_text = "\n\n".join(system_chunks).strip()
         text = "\n\n".join(prompt_chunks)
     except Exception as e:  # noqa: BLE001
         raise typer.Exit(code=_print_error(str(e))) from e
-    messages = [
+
+    messages: list[dict[str, Any]] = []
+    if system_text:
+        messages.append({"role": "system", "content": system_text})
+    messages.append(
         {
             "role": "user",
             "content": _build_user_content(
                 text=text, images=image, image_detail=image_detail
             ),
         }
-    ]
+    )
 
     try:
         resp = ref.provider.chat_completions(model=model, messages=messages)
@@ -237,16 +253,15 @@ def _normalize_image_url(value: str) -> str:
     return f"data:{mime};base64,{b64}"
 
 
-def _resolve_prompts(values: list[str]) -> list[str]:
+def _resolve_prompts(values: list[str], stdin_state: dict[str, Any]) -> list[str]:
     out: list[str] = []
-    stdin_count = 0
-
     for v in values:
         if v == "-":
-            stdin_count += 1
-            if stdin_count > 1:
-                raise ValueError("--prompt - (stdin) can only be used once")
-            out.append(sys.stdin.read())
+            if bool(stdin_state.get("used")):
+                raise ValueError("stdin (-) can only be used once")
+            stdin_state["used"] = True
+            stdin_state["text"] = sys.stdin.read()
+            out.append(str(stdin_state.get("text", "")))
             continue
 
         if v.startswith("@"):  # @path/to/file
