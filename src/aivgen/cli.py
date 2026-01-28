@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
+import os
 import sys
 from pathlib import Path
 from typing import Any, cast
@@ -22,6 +23,7 @@ app.add_typer(config_app, name="config")
 app.add_typer(provider_app, name="provider")
 
 console = Console()
+trace_console = Console(stderr=True)
 
 
 @config_app.command("show")
@@ -81,6 +83,21 @@ def provider_chat(
             "Repeat the flag to append multiple chunks."
         ),
     ),
+    stream: bool = typer.Option(
+        True,
+        "--stream/--no-stream",
+        help="Stream output to stdout (default: stream).",
+    ),
+    reasoning: bool = typer.Option(
+        True,
+        "--reasoning/--no-reasoning",
+        help="Print reasoning content to stderr if present (default: enabled).",
+    ),
+    trace: bool = typer.Option(
+        False,
+        "--trace",
+        help="Print request/response trace to stderr (redacted).",
+    ),
     image: list[str] = typer.Option(
         [],
         "--image",
@@ -126,13 +143,27 @@ def provider_chat(
         }
     )
 
+    if trace:
+        _trace_request(provider=provider, model=model, messages=messages)
+
+    if not stream:
+        try:
+            resp = ref.provider.chat_completions(model=model, messages=messages)
+        except Exception as e:  # noqa: BLE001
+            raise typer.Exit(code=_print_error(str(e))) from e
+
+        content = _extract_chat_content(resp)
+        typer.echo(content)
+        return
+
     try:
-        resp = ref.provider.chat_completions(model=model, messages=messages)
+        resp = ref.provider.chat_completions(
+            model=model, messages=messages, stream=True
+        )
     except Exception as e:  # noqa: BLE001
         raise typer.Exit(code=_print_error(str(e))) from e
 
-    content = _extract_chat_content(resp)
-    typer.echo(content)
+    _stream_chat_response(resp, trace=trace, reasoning=reasoning)
 
 
 @provider_app.command("models")
@@ -213,6 +244,149 @@ def _extract_chat_content(resp: object) -> str:
     raise ValueError(
         "Unexpected provider response shape: missing choices[0].message.content"
     )
+
+
+def _stream_chat_response(resp: object, *, trace: bool, reasoning: bool) -> None:
+    try:
+        iterator = iter(cast(Any, resp))
+    except TypeError as e:
+        raise TypeError("Provider did not return a stream iterator") from e
+
+    saw_reasoning = False
+    last_finish: str | None = None
+    last_id: str | None = None
+
+    for chunk in iterator:
+        if not getattr(chunk, "choices", None):
+            continue
+
+        choice0 = chunk.choices[0]
+        delta = getattr(choice0, "delta", None)
+        if delta is None:
+            continue
+
+        last_id = getattr(chunk, "id", last_id)
+        finish = getattr(choice0, "finish_reason", None)
+        if isinstance(finish, str) and finish:
+            last_finish = finish
+
+        if reasoning:
+            r = getattr(delta, "reasoning_content", None)
+            if isinstance(r, str) and r:
+                if not saw_reasoning:
+                    _stderr_write("\n[thinking]\n", dim=True)
+                    saw_reasoning = True
+                _stderr_write(r, dim=True)
+
+        content = getattr(delta, "content", None)
+        if isinstance(content, str) and content:
+            sys.stdout.write(content)
+            sys.stdout.flush()
+
+    if saw_reasoning:
+        _stderr_write("\n", dim=True)
+
+    sys.stdout.write("\n")
+    sys.stdout.flush()
+
+    if trace:
+        _trace_response_summary(finish_reason=last_finish, response_id=last_id)
+
+
+def _trace_request(
+    *, provider: str, model: str, messages: list[dict[str, Any]]
+) -> None:
+    payload = {
+        "event": "request",
+        "provider": provider,
+        "model": model,
+        "messages": _sanitize_messages(messages),
+    }
+    _stderr_write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", dim=True)
+
+
+def _trace_response_summary(
+    *, finish_reason: str | None, response_id: str | None
+) -> None:
+    payload = {
+        "event": "response.done",
+        "id": response_id,
+        "finish_reason": finish_reason,
+    }
+    _stderr_write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", dim=True)
+
+
+def _stderr_should_style() -> bool:
+    if os.getenv("NO_COLOR") is not None:
+        return False
+    return sys.stderr.isatty()
+
+
+def _stderr_write(text: str, *, dim: bool) -> None:
+    if _stderr_should_style():
+        trace_console.print(
+            text,
+            style="dim" if dim else None,
+            end="",
+            markup=False,
+            highlight=False,
+            soft_wrap=True,
+        )
+        return
+    sys.stderr.write(text)
+    sys.stderr.flush()
+
+
+def _sanitize_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for m in messages:
+        role = m.get("role")
+        content = m.get("content")
+        if isinstance(content, list):
+            sanitized_parts: list[dict[str, Any]] = []
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                if part.get("type") == "text":
+                    sanitized_parts.append(
+                        {"type": "text", "text": part.get("text", "")}
+                    )
+                    continue
+                if part.get("type") == "image_url":
+                    iu = part.get("image_url")
+                    if isinstance(iu, dict):
+                        url = iu.get("url")
+                        detail = iu.get("detail")
+                        sanitized_parts.append(
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": _truncate_data_url(url),
+                                    "detail": detail,
+                                },
+                            }
+                        )
+                    continue
+            out.append({"role": role, "content": sanitized_parts})
+            continue
+
+        out.append({"role": role, "content": content})
+    return out
+
+
+def _truncate_data_url(url: object) -> str:
+    if not isinstance(url, str):
+        return ""
+    if url.startswith("data:image/"):
+        prefix_end = url.find("base64,")
+        if prefix_end != -1:
+            prefix_end += len("base64,")
+            prefix = url[:prefix_end]
+            b64 = url[prefix_end:]
+            head = b64[:64]
+            return f"{prefix}{head}...(len={len(b64)})"
+        return url[:96] + "..."
+    return url
 
 
 def _build_user_content(*, text: str, images: list[str], image_detail: str) -> Any:
