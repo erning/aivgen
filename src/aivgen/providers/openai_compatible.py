@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Protocol
+from typing import Any, Mapping
 
 from openai import DefaultHttpxClient, OpenAI
 
@@ -10,33 +10,13 @@ class ProviderError(RuntimeError):
     pass
 
 
-class _ChatCompletionsProtocol(Protocol):
-    def create(
-        self,
-        *,
-        model: str,
-        messages: list[dict[str, str]],
-        extra_headers: Mapping[str, str] | None = None,
-        **kwargs: Any,
-    ) -> Any:  # noqa: ANN401,E501
-        ...
-
-
-class _ChatProtocol(Protocol):
-    completions: _ChatCompletionsProtocol
-
-
-class _OpenAIClientProtocol(Protocol):
-    chat: _ChatProtocol
-
-
 @dataclass(frozen=True)
 class OpenAICompatibleProvider:
     name: str
     base_url: str
     api_key: str
     headers: dict[str, str]
-    _client: _OpenAIClientProtocol
+    _client: Any
 
     @classmethod
     def from_config(
@@ -93,3 +73,6 @@ class OpenAICompatibleProvider:
             extra_headers=extra_headers if extra_headers else None,
             **kwargs,
         )
+
+    def list_models(self) -> Any:  # noqa: ANN401
+        return self._client.models.list()
