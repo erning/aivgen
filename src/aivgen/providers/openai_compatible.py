@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 from openai import DefaultHttpxClient, OpenAI
 
@@ -21,7 +22,7 @@ class OpenAICompatibleProvider:
     @classmethod
     def from_config(
         cls, *, name: str, config: Mapping[str, Any]
-    ) -> "OpenAICompatibleProvider":
+    ) -> OpenAICompatibleProvider:
         base_url = config.get("base_url")
         api_key = config.get("api_key")
         headers_raw = config.get("headers")

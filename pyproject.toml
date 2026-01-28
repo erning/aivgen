@@ -24,4 +24,30 @@ build-backend = "uv_build"
 dev = [
     "basedpyright>=1.37.2",
     "pytest>=8.0.0",
+    "ruff>=0.9.0",
 ]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "UP", # pyupgrade
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "B017", # assertRaises(Exception) style
+]
+"src/aivgen/cli.py" = [
+    "B008", # Typer Option/Argument in defaults is standard pattern
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

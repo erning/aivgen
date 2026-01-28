@@ -7,7 +7,6 @@ from typer.testing import CliRunner
 
 import aivgen.cli as cli
 
-
 runner = CliRunner()
 
 

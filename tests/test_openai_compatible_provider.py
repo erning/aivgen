@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 import pytest
 
@@ -71,6 +72,7 @@ def test_call_merges_per_request_headers_over_provider_headers() -> None:
     assert resp == {"ok": True}
     assert seen["model"] == "glm-4"
     assert seen["messages"][0]["content"] == "hi"
-    # provider default headers are set on the client; per-request headers are passed as extra_headers.
+    # Provider default headers are set on the client.
+    # Per-request headers are passed as extra_headers.
     assert seen["extra_headers"] == {"X-B": "override", "X-C": "3"}
     assert seen["kwargs"]["temperature"] == 0.1

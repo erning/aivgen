@@ -10,7 +10,6 @@ from aivgen.config import ConfigError, load_config
 from aivgen.providers.openai_compatible import ProviderError
 from aivgen.providers.registry import build_provider
 
-
 app = typer.Typer(no_args_is_help=True)
 config_app = typer.Typer(no_args_is_help=True)
 provider_app = typer.Typer(no_args_is_help=True)
@@ -36,7 +35,7 @@ def config_show(
     try:
         cfg = load_config(config_path=config_path)
     except ConfigError as e:
-        raise typer.Exit(code=_print_error(str(e)))
+        raise typer.Exit(code=_print_error(str(e))) from e
 
     if as_json:
         typer.echo(cfg.to_json(redact_secrets=redact))
@@ -55,7 +54,7 @@ def provider_list(
     try:
         cfg = load_config(config_path=config_path)
     except ConfigError as e:
-        raise typer.Exit(code=_print_error(str(e)))
+        raise typer.Exit(code=_print_error(str(e))) from e
 
     for name in sorted(cfg.aivgen.providers.keys()):
         typer.echo(name)
@@ -78,7 +77,7 @@ def provider_chat(
         cfg = load_config(config_path=config_path)
         ref = build_provider(cfg, name=provider)
     except (ConfigError, ProviderError) as e:
-        raise typer.Exit(code=_print_error(str(e)))
+        raise typer.Exit(code=_print_error(str(e))) from e
 
     text = "\n\n".join(prompt)
     messages = [{"role": "user", "content": text}]
@@ -86,7 +85,7 @@ def provider_chat(
     try:
         resp = ref.provider.chat_completions(model=model, messages=messages)
     except Exception as e:  # noqa: BLE001
-        raise typer.Exit(code=_print_error(str(e)))
+        raise typer.Exit(code=_print_error(str(e))) from e
 
     content = _extract_chat_content(resp)
     typer.echo(content)
@@ -103,7 +102,7 @@ def provider_models(
         cfg = load_config(config_path=config_path)
         ref = build_provider(cfg, name=provider)
     except (ConfigError, ProviderError) as e:
-        raise typer.Exit(code=_print_error(str(e)))
+        raise typer.Exit(code=_print_error(str(e))) from e
 
     list_models = getattr(ref.provider, "list_models", None)
     if list_models is None:
@@ -114,7 +113,7 @@ def provider_models(
     try:
         models = list_models()
     except Exception as e:  # noqa: BLE001
-        raise typer.Exit(code=_print_error(str(e)))
+        raise typer.Exit(code=_print_error(str(e))) from e
 
     for mid in _extract_model_ids(models):
         typer.echo(mid)
@@ -150,10 +149,10 @@ def _extract_chat_content(resp: object) -> str:
     # OpenAI SDK returns a typed object. Keep this function forgiving so
     # provider implementations can vary while CLI remains stable.
     try:
-        choices = getattr(resp, "choices")
+        choices = resp.choices  # type: ignore[attr-defined]
         choice0 = choices[0]
-        msg = getattr(choice0, "message")
-        content = getattr(msg, "content")
+        msg = choice0.message  # type: ignore[attr-defined]
+        content = msg.content  # type: ignore[attr-defined]
         if isinstance(content, str):
             return content
     except Exception:  # noqa: BLE001
