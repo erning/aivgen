@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import base64
 import json
+import mimetypes
+from pathlib import Path
 from typing import Any, cast
 
 import typer
@@ -69,6 +72,19 @@ def provider_chat(
         "--prompt",
         help="Prompt text. Repeat the flag to append multiple prompts.",
     ),
+    image: list[str] = typer.Option(
+        [],
+        "--image",
+        help=(
+            "Image URL, data URL, or local file path. "
+            "Repeat the flag for multiple images."
+        ),
+    ),
+    image_detail: str = typer.Option(
+        "auto",
+        "--image-detail",
+        help="Image detail hint: auto, low, or high.",
+    ),
     config_path: str | None = typer.Option(
         None, "--config", help="Path to a YAML config file."
     ),
@@ -80,7 +96,14 @@ def provider_chat(
         raise typer.Exit(code=_print_error(str(e))) from e
 
     text = "\n\n".join(prompt)
-    messages = [{"role": "user", "content": text}]
+    messages = [
+        {
+            "role": "user",
+            "content": _build_user_content(
+                text=text, images=image, image_detail=image_detail
+            ),
+        }
+    ]
 
     try:
         resp = ref.provider.chat_completions(model=model, messages=messages)
@@ -169,6 +192,44 @@ def _extract_chat_content(resp: object) -> str:
     raise ValueError(
         "Unexpected provider response shape: missing choices[0].message.content"
     )
+
+
+def _build_user_content(*, text: str, images: list[str], image_detail: str) -> Any:
+    if not images:
+        return text
+
+    if image_detail not in {"auto", "low", "high"}:
+        raise ValueError("--image-detail must be one of: auto, low, high")
+
+    content: list[dict[str, Any]] = [{"type": "text", "text": text}]
+    for img in images:
+        url = _normalize_image_url(img)
+        content.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": url, "detail": image_detail},
+            }
+        )
+    return content
+
+
+def _normalize_image_url(value: str) -> str:
+    if value.startswith("data:image/"):
+        return value
+    if value.startswith("http://") or value.startswith("https://"):
+        return value
+
+    path = Path(value)
+    if not path.exists() or not path.is_file():
+        raise FileNotFoundError(f"Image file not found: {value}")
+
+    mime, _ = mimetypes.guess_type(path.name)
+    if mime is None or not mime.startswith("image/"):
+        raise ValueError(f"Unsupported image type: {path.name}")
+
+    data = path.read_bytes()
+    b64 = base64.b64encode(data).decode("ascii")
+    return f"data:{mime};base64,{b64}"
 
 
 def _print_error(message: str) -> int:

@@ -63,7 +63,7 @@ class OpenAICompatibleProvider:
         self,
         *,
         model: str,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         headers: Mapping[str, str] | None = None,
         **kwargs: Any,
     ) -> Any:
