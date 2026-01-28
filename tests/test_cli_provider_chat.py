@@ -77,6 +77,80 @@ def test_provider_chat_joins_prompts_and_prints_content(monkeypatch) -> None:  #
     assert fake.seen["messages"] == [{"role": "user", "content": "first\n\nsecond"}]
 
 
+def test_provider_chat_prompt_from_file(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
+    fake = _FakeProvider()
+
+    p = tmp_path / "p.txt"
+    p.write_text("from-file", encoding="utf-8")
+
+    def fake_load_config(*, config_path=None, cwd=None):  # noqa: ANN001
+        return object()
+
+    def fake_build_provider(cfg, *, name: str):  # noqa: ANN001
+        class _Ref:
+            provider = fake
+
+        return _Ref()
+
+    monkeypatch.setattr(cli, "load_config", fake_load_config)
+    monkeypatch.setattr(cli, "build_provider", fake_build_provider)
+
+    res = runner.invoke(
+        cli.app,
+        [
+            "provider",
+            "chat",
+            "--provider",
+            "zhipu",
+            "--model",
+            "glm-4",
+            "--prompt",
+            f"@{p}",
+            "--prompt",
+            "and-more",
+        ],
+    )
+
+    assert res.exit_code == 0, res.stdout
+    assert fake.seen["messages"] == [
+        {"role": "user", "content": "from-file\n\nand-more"}
+    ]
+
+
+def test_provider_chat_prompt_from_stdin(monkeypatch) -> None:  # noqa: ANN001
+    fake = _FakeProvider()
+
+    def fake_load_config(*, config_path=None, cwd=None):  # noqa: ANN001
+        return object()
+
+    def fake_build_provider(cfg, *, name: str):  # noqa: ANN001
+        class _Ref:
+            provider = fake
+
+        return _Ref()
+
+    monkeypatch.setattr(cli, "load_config", fake_load_config)
+    monkeypatch.setattr(cli, "build_provider", fake_build_provider)
+
+    res = runner.invoke(
+        cli.app,
+        [
+            "provider",
+            "chat",
+            "--provider",
+            "zhipu",
+            "--model",
+            "glm-4",
+            "--prompt",
+            "-",
+        ],
+        input="from-stdin",
+    )
+
+    assert res.exit_code == 0, res.stdout
+    assert fake.seen["messages"] == [{"role": "user", "content": "from-stdin"}]
+
+
 def test_provider_chat_accepts_local_images(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
     fake = _FakeProvider()
 

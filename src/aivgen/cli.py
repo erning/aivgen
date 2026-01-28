@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
+import sys
 from pathlib import Path
 from typing import Any, cast
 
@@ -95,7 +96,11 @@ def provider_chat(
     except (ConfigError, ProviderError) as e:
         raise typer.Exit(code=_print_error(str(e))) from e
 
-    text = "\n\n".join(prompt)
+    try:
+        prompt_chunks = _resolve_prompts(prompt)
+        text = "\n\n".join(prompt_chunks)
+    except Exception as e:  # noqa: BLE001
+        raise typer.Exit(code=_print_error(str(e))) from e
     messages = [
         {
             "role": "user",
@@ -230,6 +235,30 @@ def _normalize_image_url(value: str) -> str:
     data = path.read_bytes()
     b64 = base64.b64encode(data).decode("ascii")
     return f"data:{mime};base64,{b64}"
+
+
+def _resolve_prompts(values: list[str]) -> list[str]:
+    out: list[str] = []
+    stdin_count = 0
+
+    for v in values:
+        if v == "-":
+            stdin_count += 1
+            if stdin_count > 1:
+                raise ValueError("--prompt - (stdin) can only be used once")
+            out.append(sys.stdin.read())
+            continue
+
+        if v.startswith("@"):  # @path/to/file
+            path = Path(v[1:])
+            if not path.exists() or not path.is_file():
+                raise FileNotFoundError(f"Prompt file not found: {path}")
+            out.append(path.read_text(encoding="utf-8"))
+            continue
+
+        out.append(v)
+
+    return out
 
 
 def _print_error(message: str) -> int:
