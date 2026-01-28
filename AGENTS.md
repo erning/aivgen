@@ -12,7 +12,9 @@ This repo is intentionally early-stage. Keep changes small, typed, and testable.
 
 ```bash
 uv sync --dev
-./.venv/bin/python -m pytest -q
+uv run ruff check .
+uv run ruff format
+uv run pytest -q
 ```
 
 ## Config
@@ -65,6 +67,8 @@ Entry point: `aiv` (`pyproject.toml` -> `aivgen.cli:main`)
 Commands:
 - `aiv config show` prints the effective config (optionally redacted).
 - `aiv provider list` prints provider names, one per line.
+- `aiv provider chat` sends prompts to a provider.
+- `aiv provider models` lists provider models.
 
 ## Testing
 
