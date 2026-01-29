@@ -124,18 +124,21 @@ class GeminiProvider:
             config_kwargs["max_output_tokens"] = kwargs["max_tokens"]
 
         # Handle thinking/reasoning for Gemini 2.5+ and 3.0+
-        # Check if model supports thinking
-        if any(x in model for x in ["gemini-2.5", "gemini-3"]):
-            thinking_config = kwargs.get("thinking_config")
-            if thinking_config:
-                config_kwargs["thinking_config"] = types.ThinkingConfig(
-                    thinking_budget=thinking_config.get("thinking_budget", 1024)
+        # Gemini 3 uses thinking_level, Gemini 2.5 uses thinking_budget
+        if "gemini-3" in model:
+            thinking_config = kwargs.get("thinking_config", {})
+            level = thinking_config.get("thinking_level", "MEDIUM")
+            config_kwargs["thinking_config"] = types.ThinkingConfig(
+                thinking_level=getattr(
+                    types.ThinkingLevel, level, types.ThinkingLevel.MEDIUM
                 )
-            else:
-                # Default thinking budget for reasoning models
-                config_kwargs["thinking_config"] = types.ThinkingConfig(
-                    thinking_budget=1024
-                )
+            )
+        elif "gemini-2.5" in model:
+            thinking_config = kwargs.get("thinking_config", {})
+            budget = thinking_config.get("thinking_budget", 1024)
+            config_kwargs["thinking_config"] = types.ThinkingConfig(
+                thinking_budget=budget
+            )
 
         config = types.GenerateContentConfig(**config_kwargs) if config_kwargs else None
 
