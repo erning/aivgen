@@ -365,9 +365,9 @@ def _stream_chat_response(resp: object, *, trace: bool) -> None:
     except TypeError as e:
         raise TypeError("Provider did not return a stream iterator") from e
 
-    saw_reasoning = False
     last_finish: str | None = None
     last_id: str | None = None
+    saw_content = False
 
     for chunk in iterator:
         if not getattr(chunk, "choices", None):
@@ -386,18 +386,15 @@ def _stream_chat_response(resp: object, *, trace: bool) -> None:
         if trace:
             r = getattr(delta, "reasoning_content", None)
             if isinstance(r, str) and r:
-                if not saw_reasoning:
-                    _stderr_write("\n[thinking]\n", dim=True)
-                    saw_reasoning = True
                 _stderr_write(r, dim=True)
 
         content = getattr(delta, "content", None)
         if isinstance(content, str) and content:
+            if trace and not saw_content:
+                _stderr_write("\n", dim=True)
+                saw_content = True
             sys.stdout.write(content)
             sys.stdout.flush()
-
-    if saw_reasoning:
-        _stderr_write("\n", dim=True)
 
     sys.stdout.write("\n")
     sys.stdout.flush()
