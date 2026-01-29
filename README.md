@@ -31,3 +31,14 @@ uv run ruff check .
 uv run ruff format
 uv run pytest -q
 ```
+
+### Example
+
+```bash
+uv run aiv provider chat \
+    --provider zhipu --model glm-4.6v \
+    --system-prompt @prompts/base.md \
+    --prompt "Audio Voice 用西班牙语，其他用中文" \
+    --image ~/Downloads/product-image.jpg \
+    --trace
+```
