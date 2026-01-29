@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -12,6 +13,24 @@ from aivgen.config import AivConfig, AivGenConfig, ProviderConfig, ScriptConfig
 runner = CliRunner()
 
 
+@dataclass
+class _Delta:
+    content: str | None = None
+    reasoning_content: str | None = None
+
+
+@dataclass
+class _ChunkChoice:
+    delta: _Delta
+    finish_reason: str | None = None
+
+
+@dataclass
+class _Chunk:
+    choices: list[_ChunkChoice]
+    id: str | None = "resp-1"
+
+
 class _FakeProvider:
     def __init__(self) -> None:
         self.seen: dict[str, Any] = {}
@@ -22,6 +41,22 @@ class _FakeProvider:
         self.seen["model"] = model
         self.seen["messages"] = messages
         self.seen["kwargs"] = kwargs
+
+        if kwargs.get("stream") is True:
+            return iter(
+                [
+                    _Chunk(choices=[_ChunkChoice(delta=_Delta(content="script"))]),
+                    _Chunk(choices=[_ChunkChoice(delta=_Delta(content=" result"))]),
+                    _Chunk(
+                        choices=[
+                            _ChunkChoice(
+                                delta=_Delta(content=None), finish_reason="stop"
+                            )
+                        ]
+                    ),
+                ]
+            )
+
         return {"choices": [{"message": {"content": "script result"}}]}
 
 
@@ -76,7 +111,7 @@ def test_script_uses_config_defaults(monkeypatch, tmp_path: Path) -> None:  # no
     monkeypatch.setattr(cli, "load_config", fake_load_config)
     monkeypatch.setattr(cli, "build_provider", fake_build_provider)
 
-    res = runner.invoke(cli.app, ["script", "--image", str(img), "--no-stream"])
+    res = runner.invoke(cli.app, ["script", "--image", str(img)])
 
     assert res.exit_code == 0, res.stdout
     assert res.stdout.strip() == "script result"
@@ -210,7 +245,7 @@ def test_script_writes_to_file(monkeypatch, tmp_path: Path) -> None:  # noqa: AN
 
     res = runner.invoke(
         cli.app,
-        ["script", "--image", str(img), "--output", str(output_file), "--no-stream"],
+        ["script", "--image", str(img), "--output", str(output_file)],
     )
 
     assert res.exit_code == 0, res.stdout

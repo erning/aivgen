@@ -81,16 +81,6 @@ def chat(
             "Repeat the flag to append multiple chunks."
         ),
     ),
-    stream: bool = typer.Option(
-        True,
-        "--stream/--no-stream",
-        help="Stream output to stdout (default: stream).",
-    ),
-    reasoning: bool = typer.Option(
-        True,
-        "--reasoning/--no-reasoning",
-        help="Print reasoning content to stderr if present (default: enabled).",
-    ),
     trace: bool = typer.Option(
         False,
         "--trace",
@@ -144,16 +134,6 @@ def chat(
     if trace:
         _trace_request(provider=provider, model=model, messages=messages)
 
-    if not stream:
-        try:
-            resp = ref.provider.chat_completions(model=model, messages=messages)
-        except Exception as e:  # noqa: BLE001
-            raise typer.Exit(code=_print_error(str(e))) from e
-
-        content = _extract_chat_content(resp)
-        typer.echo(content)
-        return
-
     try:
         resp = ref.provider.chat_completions(
             model=model, messages=messages, stream=True
@@ -161,7 +141,7 @@ def chat(
     except Exception as e:  # noqa: BLE001
         raise typer.Exit(code=_print_error(str(e))) from e
 
-    _stream_chat_response(resp, trace=trace, reasoning=reasoning)
+    _stream_chat_response(resp, trace=trace)
 
 
 @app.command("models")
@@ -211,14 +191,6 @@ def script(
         "--prompt",
         help="Prompt text. Supports @file and -. Repeatable.",
     ),
-    stream: bool | None = typer.Option(
-        None, "--stream/--no-stream", help="Stream output (default: true)."
-    ),
-    reasoning: bool | None = typer.Option(
-        None,
-        "--reasoning/--no-reasoning",
-        help="Print reasoning to stderr (default: true).",
-    ),
     trace: bool | None = typer.Option(
         None, "--trace/--no-trace", help="Print request/response trace."
     ),
@@ -229,6 +201,7 @@ def script(
         None, "--config", help="Path to a YAML config file."
     ),
 ) -> None:
+    """Generate video shooting script from image."""
     try:
         cfg = load_config(config_path=config_path)
     except ConfigError as e:
@@ -252,16 +225,6 @@ def script(
             code=_print_error("Missing required option: --model (or set in config)")
         )
 
-    final_stream = (
-        stream
-        if stream is not None
-        else (script_cfg.stream if script_cfg is not None else True)
-    )
-    final_reasoning = (
-        reasoning
-        if reasoning is not None
-        else (script_cfg.reasoning if script_cfg is not None else True)
-    )
     final_trace = (
         trace
         if trace is not None
@@ -301,22 +264,6 @@ def script(
     if final_trace:
         _trace_request(provider=final_provider, model=final_model, messages=messages)
 
-    if not final_stream:
-        try:
-            resp = ref.provider.chat_completions(
-                model=final_model, messages=messages, stream=False
-            )
-        except Exception as e:
-            raise typer.Exit(code=_print_error(str(e))) from e
-
-        result = _extract_chat_content(resp)
-
-        if output:
-            Path(output).write_text(result, encoding="utf-8")
-        else:
-            typer.echo(result)
-        return
-
     try:
         resp = ref.provider.chat_completions(
             model=final_model, messages=messages, stream=True
@@ -355,7 +302,7 @@ def script(
         if saw_reasoning:
             _stderr_write("\n", dim=True)
     else:
-        _stream_chat_response(resp, trace=final_trace, reasoning=final_reasoning)
+        _stream_chat_response(resp, trace=final_trace)
 
 
 def _extract_model_ids(models: object) -> list[str]:
@@ -414,7 +361,7 @@ def _extract_chat_content(resp: object) -> str:
     )
 
 
-def _stream_chat_response(resp: object, *, trace: bool, reasoning: bool) -> None:
+def _stream_chat_response(resp: object, *, trace: bool) -> None:
     try:
         iterator = iter(cast(Any, resp))
     except TypeError as e:

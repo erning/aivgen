@@ -148,7 +148,7 @@ def test_provider_chat_streams_by_default(monkeypatch) -> None:  # noqa: ANN001
     assert res.stdout.strip() == "hello"
 
 
-def test_provider_chat_no_stream(monkeypatch) -> None:  # noqa: ANN001
+def test_provider_chat_streaming(monkeypatch) -> None:  # noqa: ANN001
     fake = _FakeProvider()
 
     def fake_load_config(*, config_path=None, cwd=None):  # noqa: ANN001
@@ -173,7 +173,6 @@ def test_provider_chat_no_stream(monkeypatch) -> None:  # noqa: ANN001
             "glm-4",
             "--prompt",
             "x",
-            "--no-stream",
         ],
     )
 
