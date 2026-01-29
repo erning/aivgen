@@ -5,6 +5,5 @@ aivgen:
       base_url: "https://open.bigmodel.cn/api/paas/v4"
       api_key: "${AIVGEN_ZHIPU_API_KEY}"
     gemini:
-      type: openai-compatible
-      base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+      type: gemini
       api_key: "${GEMINI_API_KEY}"
