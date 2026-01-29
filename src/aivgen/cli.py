@@ -325,30 +325,32 @@ def script(
         raise typer.Exit(code=_print_error(str(e))) from e
 
     if output:
-        # Collect content and reasoning separately
-        content_chunks: list[str] = []
-        reasoning_chunks: list[str] = []
-        for chunk in resp:
-            if not getattr(chunk, "choices", None):
-                continue
-            choice0 = chunk.choices[0]
-            delta = getattr(choice0, "delta", None)
-            if delta is None:
-                continue
-            content_piece = getattr(delta, "content", None)
-            if isinstance(content_piece, str) and content_piece:
-                content_chunks.append(content_piece)
-            reasoning_piece = getattr(delta, "reasoning_content", None)
-            if isinstance(reasoning_piece, str) and reasoning_piece:
-                reasoning_chunks.append(reasoning_piece)
+        output_path = Path(output)
+        saw_reasoning = False
+        with output_path.open("w", encoding="utf-8") as f:
+            for chunk in resp:
+                if not getattr(chunk, "choices", None):
+                    continue
+                choice0 = chunk.choices[0]
+                delta = getattr(choice0, "delta", None)
+                if delta is None:
+                    continue
 
-        # Write reasoning to stderr if present and enabled
-        if final_reasoning and reasoning_chunks:
-            _stderr_write("\n[thinking]\n", dim=True)
-            _stderr_write("".join(reasoning_chunks), dim=True)
+                if final_reasoning:
+                    reasoning_piece = getattr(delta, "reasoning_content", None)
+                    if isinstance(reasoning_piece, str) and reasoning_piece:
+                        if not saw_reasoning:
+                            _stderr_write("\n[thinking]\n", dim=True)
+                            saw_reasoning = True
+                        _stderr_write(reasoning_piece, dim=True)
+
+                content_piece = getattr(delta, "content", None)
+                if isinstance(content_piece, str) and content_piece:
+                    f.write(content_piece)
+                    f.flush()
+
+        if saw_reasoning:
             _stderr_write("\n", dim=True)
-
-        Path(output).write_text("".join(content_chunks), encoding="utf-8")
     else:
         _stream_chat_response(resp, trace=final_trace, reasoning=final_reasoning)
 
@@ -495,6 +497,7 @@ def _stderr_write(text: str, *, dim: bool) -> None:
             highlight=False,
             soft_wrap=True,
         )
+        trace_console.file.flush()
         return
     sys.stderr.write(text)
     sys.stderr.flush()
