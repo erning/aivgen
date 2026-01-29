@@ -7,3 +7,13 @@ aivgen:
     gemini:
       type: gemini
       api_key: "${GEMINI_API_KEY}"
+    kimi:
+      type: openai-compatible
+      base_url: "https://api.moonshot.cn/v1"
+      api_key: "${AIVGEN_KIMI_API_KEY}"
+
+  script:
+    provider: zhipu
+    model: glm-4.6v
+    system-prompt:
+      - "@prompts/base.md"

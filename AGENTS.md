@@ -20,6 +20,7 @@ CLI + config + provider plumbing for AI inference. Early-stage—keep changes sm
 │   ├── config.default.yaml     # Built-in defaults
 │   └── providers/              # Provider implementations
 │       ├── __init__.py
+│       ├── gemini.py           # Native Gemini provider with thinking support
 │       ├── registry.py         # Provider dispatch
 │       └── openai_compatible.py
 ├── tests/                      # Unit tests (excluded from type checking)
@@ -55,6 +56,15 @@ aivgen:
     <provider-name>:
       type: <provider-type>
       # provider-specific fields
+  
+  # Optional: script command defaults
+  script:
+    provider: <default-provider>
+    model: <default-model>
+    system-prompt:
+      - "base system prompt"
+    prompt:
+      - "base prompt"
 ```
 
 ## Providers
@@ -63,6 +73,10 @@ Provider configuration is dynamic:
 - Provider names are keys under `aivgen.providers`.
 - Type dispatch happens in `src/aivgen/providers/registry.py`.
 
+Supported types:
+- `openai-compatible` - Any OpenAI-compatible API
+- `gemini` - Native Google Gemini (supports thinking/reasoning)
+
 See `src/aivgen/providers/AGENTS.md` for provider implementation details.
 
 ## CLI
@@ -70,10 +84,15 @@ See `src/aivgen/providers/AGENTS.md` for provider implementation details.
 Entry point: `aiv` (`pyproject.toml` → `aivgen.cli:main`)
 
 Commands:
-- `aiv config show [--json] [--redact/--no-redact]`
-- `aiv provider list`
-- `aiv provider chat --provider <p> --model <m> --prompt "..."`
-- `aiv provider models --provider <p>`
+- `aiv providers` - List configured providers
+- `aiv chat --provider <p> --model <m> --prompt "..."` - Chat with model
+- `aiv models --provider <p>` - List available models
+- `aiv script --image <path> [--output <file>]` - Generate video script from image
+
+Global options:
+- `--trace` (default: on) - Print request/response trace to stderr
+- `--no-trace` - Disable trace output
+- `--config <path>` - Use specific config file
 
 ## Local Dev
 

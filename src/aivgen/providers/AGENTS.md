@@ -4,7 +4,11 @@ Provider implementations for aivgen. New providers are added here.
 
 ## Overview
 
-Providers are dynamically dispatched by type in `registry.py`. Currently supports `openai-compatible` type.
+Providers are dynamically dispatched by type in `registry.py`.
+
+Supported types:
+- `openai-compatible` - OpenAI-compatible API
+- `gemini` - Native Google Gemini API with thinking support
 
 ## Adding a New Provider Type
 
@@ -59,6 +63,26 @@ Optional:
 Header rules:
 - Provider-level `headers` apply to every request.
 - Per-request headers override provider headers on key conflicts.
+
+## Gemini Provider
+
+`gemini.py` - Native Google Gemini SDK (`google-genai`).
+
+Supports thinking/reasoning for Gemini 2.5+ and 3.0+ models.
+
+Required config:
+- `api_key`: string
+
+Example:
+```yaml
+aivgen:
+  providers:
+    gemini:
+      type: gemini
+      api_key: "${GEMINI_API_KEY}"
+```
+
+Thinking content is returned via `reasoning_content` field in streaming responses.
 
 ## Error Handling
 

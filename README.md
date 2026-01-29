@@ -35,10 +35,23 @@ uv run pytest -q
 ### Example
 
 ```bash
-uv run aiv provider chat \
+uv run aiv chat \
     --provider zhipu --model glm-4.6v \
     --system-prompt @prompts/base.md \
-    --prompt "Audio Voice 用西班牙语，其他用中文" \
+    --prompt "Audio Voice 用西班牙语，其他内容用中文" \
     --image ~/Downloads/product-image.jpg \
-    --trace
+```
+
+```bash
+uv run aiv script \
+    --image ~/Downloads/product-image.jpg \
+    --prompt "TikTok 德国市场" \
+    --prompt "Audio Voice 用德语，其他内容用中文" \
+```
+
+```bash
+uv run aiv chat \
+    --provider zhipu --model glm-4.7 \
+    --system-prompt "summary the following content in English, less than 300 words" \
+    --prompt @prompts/script-fr.md
 ```
