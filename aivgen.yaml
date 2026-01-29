@@ -11,6 +11,9 @@ aivgen:
       type: openai-compatible
       base_url: "https://api.moonshot.cn/v1"
       api_key: "${AIVGEN_KIMI_API_KEY}"
+    ollama:
+      type: ollama
+      host: "http://localhost:11434"
 
   script:
     provider: zhipu
