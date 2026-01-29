@@ -82,8 +82,8 @@ def chat(
         ),
     ),
     trace: bool = typer.Option(
-        False,
-        "--trace",
+        True,
+        "--trace/--no-trace",
         help="Print request/response trace to stderr (redacted).",
     ),
     image: list[str] = typer.Option(
@@ -192,7 +192,9 @@ def script(
         help="Prompt text. Supports @file and -. Repeatable.",
     ),
     trace: bool = typer.Option(
-        False, "--trace", help="Print request/response trace to stderr (redacted)."
+        True,
+        "--trace/--no-trace",
+        help="Print request/response trace to stderr (redacted).",
     ),
     output: str | None = typer.Option(
         None, "--output", "-o", help="Output file path (default: stdout)."
