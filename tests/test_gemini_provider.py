@@ -6,8 +6,34 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aivgen.providers.gemini import GeminiProvider
+from aivgen.providers.gemini import GeminiProvider, _parse_data_url
 from aivgen.providers.openai_compatible import ProviderError
+
+
+def test_parse_data_url_base64() -> None:
+    import base64
+
+    image_data = b"fake-image-data"
+    b64_data = base64.b64encode(image_data).decode()
+    url = f"data:image/jpeg;base64,{b64_data}"
+
+    mime_type, decoded = _parse_data_url(url)
+
+    assert mime_type == "image/jpeg"
+    assert decoded == image_data
+
+
+def test_parse_data_url_no_mime_type() -> None:
+    import base64
+
+    text_data = b"hello world"
+    b64_data = base64.b64encode(text_data).decode()
+    url = f"data:;base64,{b64_data}"
+
+    mime_type, decoded = _parse_data_url(url)
+
+    assert mime_type == "application/octet-stream"
+    assert decoded == text_data
 
 
 def test_from_config_requires_api_key() -> None:

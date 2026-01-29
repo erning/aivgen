@@ -10,6 +10,33 @@ from google.genai import types
 from aivgen.providers.openai_compatible import ProviderError
 
 
+def _parse_data_url(url: str) -> tuple[str, bytes]:
+    """Parse a data URL and return (mime_type, decoded_bytes)."""
+    if not url.startswith("data:"):
+        raise ValueError(f"Invalid data URL: {url[:50]}...")
+
+    content = url[5:]
+    comma_idx = content.find(",")
+    if comma_idx == -1:
+        raise ValueError("Invalid data URL: missing comma separator")
+
+    metadata = content[:comma_idx]
+    b64_data = content[comma_idx + 1 :]
+
+    parts = metadata.split(";")
+    mime_type = parts[0] if parts[0] else "application/octet-stream"
+    is_base64 = "base64" in parts
+
+    if is_base64:
+        import base64
+
+        return mime_type, base64.b64decode(b64_data)
+    else:
+        from urllib.parse import unquote
+
+        return mime_type, unquote(b64_data).encode("utf-8")
+
+
 @dataclass(frozen=True)
 class GeminiProvider:
     """Native Gemini provider using google-genai SDK.
@@ -56,8 +83,13 @@ class GeminiProvider:
                         image_url = part.get("image_url", {})
                         url = image_url.get("url", "")
                         if url.startswith("data:"):
-                            # Base64 encoded image
-                            parts.append(types.Part.from_bytes(data=url))
+                            # Parse data URL: data:image/jpeg;base64,/9j/4AAQ...
+                            mime_type, b64_data = _parse_data_url(url)
+                            parts.append(
+                                types.Part.from_bytes(
+                                    data=b64_data, mime_type=mime_type
+                                )
+                            )
                         elif url.startswith("http://") or url.startswith("https://"):
                             # URL reference - fetch and convert
                             parts.append(types.Part.from_uri(file_uri=url))
