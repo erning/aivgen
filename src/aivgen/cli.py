@@ -451,7 +451,14 @@ def _resolve_prompts(values: list[str], stdin_state: dict[str, Any]) -> list[str
 
 
 def _print_error(message: str) -> int:
-    console.print(json.dumps({"ok": False, "error": message}, indent=2, sort_keys=True))
+    console.print(
+        json.dumps(
+            {"ok": False, "error": message},
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+    )
     return 1
 
 
