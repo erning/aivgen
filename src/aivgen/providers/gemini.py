@@ -1,0 +1,255 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any
+
+from google import genai
+from google.genai import types
+
+from aivgen.providers.openai_compatible import ProviderError
+
+
+@dataclass(frozen=True)
+class GeminiProvider:
+    """Native Gemini provider using google-genai SDK.
+
+    Supports thinking/reasoning content for Gemini 2.5+ and 3.0+ models.
+    """
+
+    name: str
+    api_key: str
+    _client: Any
+
+    @classmethod
+    def from_config(cls, *, name: str, config: Mapping[str, Any]) -> GeminiProvider:
+        api_key = config.get("api_key")
+
+        if not isinstance(api_key, str) or not api_key:
+            raise ProviderError(f"Provider {name!r}: missing or invalid api_key")
+
+        client = genai.Client(api_key=api_key)
+
+        return cls(name=name, api_key=api_key, _client=client)
+
+    def _convert_messages(self, messages: list[dict[str, Any]]) -> list[types.Content]:
+        """Convert OpenAI-style messages to Gemini Content format."""
+        contents: list[types.Content] = []
+
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+
+            # Map OpenAI roles to Gemini roles
+            # Gemini uses: "user", "model" (assistant is mapped to model)
+            gemini_role = "model" if role in ("assistant", "model") else "user"
+
+            if isinstance(content, str):
+                parts = [types.Part(text=content)]
+            elif isinstance(content, list):
+                # Handle multimodal content (text + images)
+                parts: list[types.Part] = []
+                for part in content:
+                    if part.get("type") == "text":
+                        parts.append(types.Part(text=part.get("text", "")))
+                    elif part.get("type") == "image_url":
+                        image_url = part.get("image_url", {})
+                        url = image_url.get("url", "")
+                        if url.startswith("data:"):
+                            # Base64 encoded image
+                            parts.append(types.Part.from_bytes(data=url))
+                        elif url.startswith("http://") or url.startswith("https://"):
+                            # URL reference - fetch and convert
+                            parts.append(types.Part.from_uri(file_uri=url))
+            else:
+                parts = [types.Part(text=str(content))]
+
+            contents.append(types.Content(role=gemini_role, parts=parts))
+
+        return contents
+
+    def chat_completions(
+        self,
+        *,
+        model: str,
+        messages: list[dict[str, Any]],
+        headers: Mapping[str, str] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Generate chat completion with streaming support and thinking content."""
+        stream = kwargs.get("stream", False)
+        contents = self._convert_messages(messages)
+
+        # Build config
+        config_kwargs: dict[str, Any] = {}
+
+        # Handle temperature
+        if "temperature" in kwargs:
+            config_kwargs["temperature"] = kwargs["temperature"]
+
+        # Handle max_tokens
+        if "max_tokens" in kwargs:
+            config_kwargs["max_output_tokens"] = kwargs["max_tokens"]
+
+        # Handle thinking/reasoning for Gemini 2.5+ and 3.0+
+        # Check if model supports thinking
+        if any(x in model for x in ["gemini-2.5", "gemini-3"]):
+            thinking_config = kwargs.get("thinking_config")
+            if thinking_config:
+                config_kwargs["thinking_config"] = types.ThinkingConfig(
+                    thinking_budget=thinking_config.get("thinking_budget", 1024)
+                )
+            else:
+                # Default thinking budget for reasoning models
+                config_kwargs["thinking_config"] = types.ThinkingConfig(
+                    thinking_budget=1024
+                )
+
+        config = types.GenerateContentConfig(**config_kwargs) if config_kwargs else None
+
+        if stream:
+            return self._stream_response(model, contents, config)
+
+        # Non-streaming response
+        response = self._client.models.generate_content(
+            model=model, contents=contents, config=config
+        )
+
+        # Convert to OpenAI-compatible response format
+        return self._convert_response(response)
+
+    def _stream_response(
+        self,
+        model: str,
+        contents: list[types.Content],
+        config: types.GenerateContentConfig | None,
+    ) -> Any:
+        """Stream response with thinking content support."""
+        response = self._client.models.generate_content_stream(
+            model=model, contents=contents, config=config
+        )
+
+        # Return a generator that yields OpenAI-compatible chunks
+        return GeminiStreamIterator(response)
+
+    def _convert_response(self, response: Any) -> dict[str, Any]:
+        """Convert Gemini response to OpenAI-compatible format."""
+        candidate = response.candidates[0] if response.candidates else None
+        if not candidate:
+            return {
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": ""},
+                        "finish_reason": "stop",
+                    }
+                ]
+            }
+
+        content_parts = []
+        reasoning_content = ""
+
+        for part in candidate.content.parts:
+            if hasattr(part, "thought") and part.thought:
+                # This is a thinking part
+                reasoning_content += part.text
+            else:
+                content_parts.append(part.text)
+
+        content = "".join(content_parts)
+
+        return {
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": content,
+                        "reasoning_content": reasoning_content
+                        if reasoning_content
+                        else None,
+                    },
+                    "finish_reason": "stop",
+                }
+            ]
+        }
+
+    def list_models(self) -> Any:
+        """List available Gemini models."""
+        models = self._client.models.list()
+        # Convert to OpenAI-compatible format
+        return {
+            "data": [
+                {"id": model.name, "object": "model", "owned_by": "google"}
+                for model in models
+            ]
+        }
+
+
+class GeminiStreamIterator:
+    """Iterator that converts Gemini stream chunks to OpenAI-compatible format."""
+
+    def __init__(self, response: Any) -> None:
+        self._response = response
+        self._chunk_id = "gemini-chunk-0"
+
+    def __iter__(self) -> GeminiStreamIterator:
+        return self
+
+    def __next__(self) -> Any:
+        try:
+            chunk = next(self._response)
+        except StopIteration:
+            raise
+
+        # Extract content and thinking from chunk
+        content = ""
+        reasoning_content = ""
+
+        if chunk.candidates and chunk.candidates[0].content.parts:
+            for part in chunk.candidates[0].content.parts:
+                if hasattr(part, "thought") and part.thought:
+                    reasoning_content += part.text
+                else:
+                    content += part.text
+
+        # Build OpenAI-compatible chunk
+        delta: dict[str, Any] = {}
+        if content:
+            delta["content"] = content
+        if reasoning_content:
+            delta["reasoning_content"] = reasoning_content
+
+        return GeminiChunk(
+            id=self._chunk_id,
+            choices=[
+                GeminiChoice(
+                    delta=GeminiDelta(**delta),
+                    finish_reason=None,
+                )
+            ],
+        )
+
+
+@dataclass
+class GeminiChunk:
+    """OpenAI-compatible chunk structure."""
+
+    id: str
+    choices: list[GeminiChoice]
+
+
+@dataclass
+class GeminiChoice:
+    """OpenAI-compatible choice structure."""
+
+    delta: GeminiDelta
+    finish_reason: str | None
+
+
+@dataclass
+class GeminiDelta:
+    """OpenAI-compatible delta structure."""
+
+    content: str | None = None
+    reasoning_content: str | None = None
