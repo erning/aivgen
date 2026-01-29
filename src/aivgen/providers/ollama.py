@@ -86,21 +86,21 @@ class OllamaProvider:
             options["num_predict"] = kwargs["max_tokens"]
 
         try:
+            chat_kwargs: dict[str, Any] = {
+                "model": model,
+                "messages": converted_messages,
+            }
+            if options:
+                chat_kwargs["options"] = options
+
+            # Enable thinking for models that support it (e.g., qwen3, deepseek-r1)
+            chat_kwargs["think"] = True
+
             if stream:
-                response = self._client.chat(
-                    model=model,
-                    messages=converted_messages,
-                    stream=True,
-                    options=options if options else None,
-                )
+                response = self._client.chat(stream=True, **chat_kwargs)
                 return OllamaStreamIterator(response)
 
-            response = self._client.chat(
-                model=model,
-                messages=converted_messages,
-                stream=False,
-                options=options if options else None,
-            )
+            response = self._client.chat(stream=False, **chat_kwargs)
             return self._convert_response(response)
         except Exception as e:
             raise ProviderError(f"Ollama error: {e}") from e
@@ -120,7 +120,7 @@ class OllamaProvider:
             }
 
         content = getattr(message, "content", "") or ""
-        reasoning_content = getattr(message, "reasoning", None)
+        reasoning_content = getattr(message, "thinking", None)
 
         return {
             "choices": [
@@ -187,9 +187,9 @@ class OllamaStreamIterator:
         if content:
             delta["content"] = content
 
-        reasoning = getattr(message, "reasoning", None)
-        if reasoning:
-            delta["reasoning_content"] = reasoning
+        thinking = getattr(message, "thinking", None)
+        if thinking:
+            delta["reasoning_content"] = thinking
 
         done = getattr(chunk, "done", False)
         finish_reason = "stop" if done else None
