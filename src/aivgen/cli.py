@@ -336,7 +336,7 @@ def script(
                 if delta is None:
                     continue
 
-                if final_reasoning:
+                if final_trace:
                     reasoning_piece = getattr(delta, "reasoning_content", None)
                     if isinstance(reasoning_piece, str) and reasoning_piece:
                         if not saw_reasoning:
@@ -438,7 +438,7 @@ def _stream_chat_response(resp: object, *, trace: bool, reasoning: bool) -> None
         if isinstance(finish, str) and finish:
             last_finish = finish
 
-        if reasoning:
+        if trace:
             r = getattr(delta, "reasoning_content", None)
             if isinstance(r, str) and r:
                 if not saw_reasoning:
