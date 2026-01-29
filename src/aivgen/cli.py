@@ -348,6 +348,9 @@ def script(
                 if isinstance(content_piece, str) and content_piece:
                     f.write(content_piece)
                     f.flush()
+                    if final_trace:
+                        sys.stderr.write(content_piece)
+                        sys.stderr.flush()
 
         if saw_reasoning:
             _stderr_write("\n", dim=True)
