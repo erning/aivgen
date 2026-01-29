@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from aivgen.config import AivConfig, ProviderConfig
+from aivgen.providers.anthropic import AnthropicProvider
 from aivgen.providers.gemini import GeminiProvider
 from aivgen.providers.openai_compatible import OpenAICompatibleProvider, ProviderError
 
@@ -33,6 +34,10 @@ def build_provider(cfg: AivConfig, *, name: str) -> ProviderRef:
 
     if provider_type == "gemini":
         provider = GeminiProvider.from_config(name=name, config=data)
+        return ProviderRef(name=name, type=provider_type, provider=provider)
+
+    if provider_type == "anthropic":
+        provider = AnthropicProvider.from_config(name=name, config=data)
         return ProviderRef(name=name, type=provider_type, provider=provider)
 
     raise ProviderError(f"Provider {name!r}: unsupported type {provider_type!r}")
