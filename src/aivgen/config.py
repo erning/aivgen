@@ -24,7 +24,6 @@ class ProviderConfig:
 class ScriptConfig:
     provider: str | None = None
     model: str | None = None
-    trace: bool = False
     system_prompt: list[str] | None = None
     prompt: list[str] | None = None
 
@@ -123,7 +122,6 @@ def load_config(
         script_config = ScriptConfig(
             provider=script_raw.get("provider"),
             model=script_raw.get("model"),
-            trace=script_raw.get("trace", False),
             system_prompt=script_raw.get("system-prompt"),
             prompt=script_raw.get("prompt"),
         )

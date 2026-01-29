@@ -191,8 +191,8 @@ def script(
         "--prompt",
         help="Prompt text. Supports @file and -. Repeatable.",
     ),
-    trace: bool | None = typer.Option(
-        None, "--trace/--no-trace", help="Print request/response trace."
+    trace: bool = typer.Option(
+        False, "--trace", help="Print request/response trace to stderr (redacted)."
     ),
     output: str | None = typer.Option(
         None, "--output", "-o", help="Output file path (default: stdout)."
@@ -225,11 +225,7 @@ def script(
             code=_print_error("Missing required option: --model (or set in config)")
         )
 
-    final_trace = (
-        trace
-        if trace is not None
-        else (script_cfg.trace if script_cfg is not None else False)
-    )
+    final_trace = trace
 
     try:
         ref = build_provider(cfg, name=final_provider)
