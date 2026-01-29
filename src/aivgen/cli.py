@@ -192,6 +192,112 @@ def models(
         typer.echo(mid)
 
 
+@app.command("script")
+def script(
+    image: str = typer.Option(..., "--image", help="Image path, URL, or data URL."),
+    provider: str | None = typer.Option(
+        None, "--provider", help="Provider name (overrides config)."
+    ),
+    model: str | None = typer.Option(
+        None, "--model", help="Model name (overrides config)."
+    ),
+    system_prompt: list[str] = typer.Option(
+        [],
+        "--system-prompt",
+        help="System prompt text. Supports @file and -. Repeatable.",
+    ),
+    prompt: list[str] = typer.Option(
+        [],
+        "--prompt",
+        help="Prompt text. Supports @file and -. Repeatable.",
+    ),
+    trace: bool | None = typer.Option(
+        None, "--trace/--no-trace", help="Print request/response trace."
+    ),
+    output: str | None = typer.Option(
+        None, "--output", "-o", help="Output file path (default: stdout)."
+    ),
+    config_path: str | None = typer.Option(
+        None, "--config", help="Path to a YAML config file."
+    ),
+) -> None:
+    try:
+        cfg = load_config(config_path=config_path)
+    except ConfigError as e:
+        raise typer.Exit(code=_print_error(str(e))) from e
+
+    script_cfg = cfg.aivgen.script
+
+    final_provider = provider
+    if final_provider is None and script_cfg is not None:
+        final_provider = script_cfg.provider
+    if final_provider is None:
+        raise typer.Exit(
+            code=_print_error("Missing required option: --provider (or set in config)")
+        )
+
+    final_model = model
+    if final_model is None and script_cfg is not None:
+        final_model = script_cfg.model
+    if final_model is None:
+        raise typer.Exit(
+            code=_print_error("Missing required option: --model (or set in config)")
+        )
+
+    final_trace = (
+        trace
+        if trace is not None
+        else (script_cfg.trace if script_cfg is not None else False)
+    )
+
+    try:
+        ref = build_provider(cfg, name=final_provider)
+    except (ConfigError, ProviderError) as e:
+        raise typer.Exit(code=_print_error(str(e))) from e
+
+    stdin_state: dict[str, Any] = {"used": False, "text": ""}
+
+    cli_sys = _resolve_prompts(system_prompt, stdin_state)
+    cli_prompts = _resolve_prompts(prompt, stdin_state)
+
+    cfg_sys: list[str] = []
+    cfg_prompts: list[str] = []
+    if script_cfg is not None:
+        if script_cfg.system_prompt:
+            cfg_sys = _resolve_prompts(script_cfg.system_prompt, stdin_state)
+        if script_cfg.prompt:
+            cfg_prompts = _resolve_prompts(script_cfg.prompt, stdin_state)
+
+    final_system = "\n\n".join(cli_sys + cfg_sys)
+    final_user = "\n\n".join(cli_prompts + cfg_prompts)
+
+    messages: list[dict[str, Any]] = []
+    if final_system:
+        messages.append({"role": "system", "content": final_system})
+
+    image_url = _normalize_image_url(image)
+    content: list[dict[str, Any]] = [{"type": "text", "text": final_user}]
+    content.append({"type": "image_url", "image_url": {"url": image_url}})
+    messages.append({"role": "user", "content": content})
+
+    if final_trace:
+        _trace_request(provider=final_provider, model=final_model, messages=messages)
+
+    try:
+        resp = ref.provider.chat_completions(
+            model=final_model, messages=messages, stream=False
+        )
+    except Exception as e:
+        raise typer.Exit(code=_print_error(str(e))) from e
+
+    result = _extract_chat_content(resp)
+
+    if output:
+        Path(output).write_text(result, encoding="utf-8")
+    else:
+        typer.echo(result)
+
+
 def _extract_model_ids(models: object) -> list[str]:
     # Handle dict format: {"data": [{"id": "..."}, ...]}
     if isinstance(models, dict):

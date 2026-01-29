@@ -21,8 +21,18 @@ class ProviderConfig:
 
 
 @dataclass(frozen=True)
+class ScriptConfig:
+    provider: str | None = None
+    model: str | None = None
+    trace: bool = False
+    system_prompt: list[str] | None = None
+    prompt: list[str] | None = None
+
+
+@dataclass(frozen=True)
 class AivGenConfig:
     providers: dict[str, ProviderConfig]
+    script: ScriptConfig | None = None
 
 
 @dataclass(frozen=True)
@@ -104,8 +114,22 @@ def load_config(
 
         providers[provider_name] = ProviderConfig(data=dict(provider_raw))
 
+    # Parse script config if present
+    script_raw = _get_path(merged, ["aivgen", "script"])
+    script_config: ScriptConfig | None = None
+    if script_raw is not None:
+        if not isinstance(script_raw, dict):
+            raise ConfigError("Expected aivgen.script to be a mapping")
+        script_config = ScriptConfig(
+            provider=script_raw.get("provider"),
+            model=script_raw.get("model"),
+            trace=script_raw.get("trace", False),
+            system_prompt=script_raw.get("system-prompt"),
+            prompt=script_raw.get("prompt"),
+        )
+
     return AivConfig(
-        aivgen=AivGenConfig(providers=providers),
+        aivgen=AivGenConfig(providers=providers, script=script_config),
         loaded_from=tuple(loaded_from),
     )
 
