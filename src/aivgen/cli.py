@@ -193,8 +193,12 @@ def models(
 
 
 def _extract_model_ids(models: object) -> list[str]:
-    data = getattr(models, "data", None)
-    items: Any = data if data is not None else models
+    # Handle dict format: {"data": [{"id": "..."}, ...]}
+    if isinstance(models, dict):
+        items = models.get("data", [])
+    else:
+        data = getattr(models, "data", None)
+        items: Any = data if data is not None else models
 
     out: list[str] = []
     try:
