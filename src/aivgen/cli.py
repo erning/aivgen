@@ -12,7 +12,7 @@ import typer
 from rich.console import Console
 
 from aivgen.config import ConfigError, load_config
-from aivgen.providers.openai_compatible import ProviderError
+from aivgen.providers.openai import ProviderError
 from aivgen.providers.registry import build_provider
 
 app = typer.Typer(no_args_is_help=True)

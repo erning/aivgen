@@ -7,7 +7,7 @@ from typing import Any
 from google import genai
 from google.genai import types
 
-from aivgen.providers.openai_compatible import ProviderError
+from aivgen.providers.openai import ProviderError
 
 
 def _parse_data_url(url: str) -> tuple[str, bytes]:

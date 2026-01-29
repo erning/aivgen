@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from aivgen.providers.openai_compatible import OpenAICompatibleProvider, ProviderError
+from aivgen.providers.openai import OpenAIProvider, ProviderError
 
 
 @dataclass
@@ -40,12 +40,12 @@ class _FakeClient:
 
 def test_from_config_requires_base_url_and_api_key() -> None:
     with pytest.raises(ProviderError):
-        OpenAICompatibleProvider.from_config(name="zhipu", config={})
+        OpenAIProvider.from_config(name="zhipu", config={})
 
 
 def test_headers_validation() -> None:
     with pytest.raises(ProviderError):
-        OpenAICompatibleProvider.from_config(
+        OpenAIProvider.from_config(
             name="zhipu",
             config={"base_url": "https://x", "api_key": "k", "headers": []},
         )
@@ -55,7 +55,7 @@ def test_call_merges_per_request_headers_over_provider_headers() -> None:
     seen: dict[str, Any] = {}
     fake_client = _FakeClient(chat=_FakeChat(completions=_FakeCompletions(seen=seen)))
 
-    provider = OpenAICompatibleProvider(
+    provider = OpenAIProvider(
         name="zhipu",
         base_url="https://example",
         api_key="secret",
@@ -72,7 +72,5 @@ def test_call_merges_per_request_headers_over_provider_headers() -> None:
     assert resp == {"ok": True}
     assert seen["model"] == "glm-4"
     assert seen["messages"][0]["content"] == "hi"
-    # Provider default headers are set on the client.
-    # Per-request headers are passed as extra_headers.
     assert seen["extra_headers"] == {"X-B": "override", "X-C": "3"}
     assert seen["kwargs"]["temperature"] == 0.1

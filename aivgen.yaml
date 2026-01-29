@@ -1,14 +1,14 @@
 aivgen:
   providers:
     zhipu:
-      type: openai-compatible
+      type: openai
       base_url: "https://open.bigmodel.cn/api/paas/v4"
       api_key: "${AIVGEN_ZHIPU_API_KEY}"
     gemini:
       type: gemini
       api_key: "${GEMINI_API_KEY}"
     kimi:
-      type: openai-compatible
+      type: openai
       base_url: "https://api.moonshot.cn/v1"
       api_key: "${AIVGEN_KIMI_API_KEY}"
     ollama:

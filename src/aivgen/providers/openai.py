@@ -12,7 +12,7 @@ class ProviderError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class OpenAICompatibleProvider:
+class OpenAIProvider:
     name: str
     base_url: str
     api_key: str
@@ -20,9 +20,7 @@ class OpenAICompatibleProvider:
     _client: Any
 
     @classmethod
-    def from_config(
-        cls, *, name: str, config: Mapping[str, Any]
-    ) -> OpenAICompatibleProvider:
+    def from_config(cls, *, name: str, config: Mapping[str, Any]) -> OpenAIProvider:
         base_url = config.get("base_url")
         api_key = config.get("api_key")
         headers_raw = config.get("headers")
@@ -75,5 +73,5 @@ class OpenAICompatibleProvider:
             **kwargs,
         )
 
-    def list_models(self) -> Any:  # noqa: ANN401
+    def list_models(self) -> Any:
         return self._client.models.list()

@@ -7,7 +7,7 @@ from aivgen.config import AivConfig, ProviderConfig
 from aivgen.providers.anthropic import AnthropicProvider
 from aivgen.providers.gemini import GeminiProvider
 from aivgen.providers.ollama import OllamaProvider
-from aivgen.providers.openai_compatible import OpenAICompatibleProvider, ProviderError
+from aivgen.providers.openai import OpenAIProvider, ProviderError
 
 
 @dataclass(frozen=True)
@@ -29,8 +29,8 @@ def build_provider(cfg: AivConfig, *, name: str) -> ProviderRef:
     if not isinstance(provider_type, str) or not provider_type:
         raise ProviderError(f"Provider {name!r}: invalid type")
 
-    if provider_type in {"openai-compatible", "openai"}:
-        provider = OpenAICompatibleProvider.from_config(name=name, config=data)
+    if provider_type == "openai":
+        provider = OpenAIProvider.from_config(name=name, config=data)
         return ProviderRef(name=name, type=provider_type, provider=provider)
 
     if provider_type == "gemini":

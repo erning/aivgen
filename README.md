@@ -18,7 +18,7 @@ Example config (`aivgen.yaml`):
 aivgen:
   providers:
     zhipu:
-      type: openai-compatible
+      type: openai
       base_url: "https://open.bigmodel.cn/api/paas/v4"
       api_key: "${AIVGEN_ZHIPU_API_KEY}"
     gemini:
@@ -116,7 +116,7 @@ uv run basedpyright
 
 ### Supported Providers
 
-- **openai-compatible** - Any OpenAI-compatible API (e.g., Zhipu, Moonshot)
+- **openai** - OpenAI-compatible APIs (e.g., Zhipu, Moonshot, OpenAI)
 - **gemini** - Native Google Gemini (supports thinking/reasoning)
 - **anthropic** - Native Anthropic Claude (supports extended thinking)
 - **ollama** - Native Ollama SDK for local LLMs (supports reasoning models like Qwen3, DeepSeek-R1)

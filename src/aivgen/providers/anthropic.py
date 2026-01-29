@@ -5,7 +5,7 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
-from aivgen.providers.openai_compatible import ProviderError
+from aivgen.providers.openai import ProviderError
 
 
 @dataclass(frozen=True)
