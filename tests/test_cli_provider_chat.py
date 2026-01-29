@@ -98,7 +98,6 @@ def test_provider_chat_joins_prompts_and_prints_content(monkeypatch) -> None:  #
     res = runner.invoke(
         cli.app,
         [
-            "provider",
             "chat",
             "--provider",
             "zhipu",
@@ -135,7 +134,6 @@ def test_provider_chat_streams_by_default(monkeypatch) -> None:  # noqa: ANN001
     res = runner.invoke(
         cli.app,
         [
-            "provider",
             "chat",
             "--provider",
             "zhipu",
@@ -168,7 +166,6 @@ def test_provider_chat_no_stream(monkeypatch) -> None:  # noqa: ANN001
     res = runner.invoke(
         cli.app,
         [
-            "provider",
             "chat",
             "--provider",
             "zhipu",
@@ -205,7 +202,6 @@ def test_provider_chat_prompt_from_file(tmp_path: Path, monkeypatch) -> None:  #
     res = runner.invoke(
         cli.app,
         [
-            "provider",
             "chat",
             "--provider",
             "zhipu",
@@ -242,7 +238,6 @@ def test_provider_chat_prompt_from_stdin(monkeypatch) -> None:  # noqa: ANN001
     res = runner.invoke(
         cli.app,
         [
-            "provider",
             "chat",
             "--provider",
             "zhipu",
@@ -276,7 +271,6 @@ def test_provider_chat_stdin_only_once_across_args(monkeypatch) -> None:  # noqa
     res = runner.invoke(
         cli.app,
         [
-            "provider",
             "chat",
             "--provider",
             "zhipu",
@@ -312,7 +306,6 @@ def test_provider_chat_system_prompt_from_stdin(monkeypatch) -> None:  # noqa: A
     res = runner.invoke(
         cli.app,
         [
-            "provider",
             "chat",
             "--provider",
             "zhipu",
@@ -354,7 +347,6 @@ def test_provider_chat_accepts_local_images(tmp_path: Path, monkeypatch) -> None
     res = runner.invoke(
         cli.app,
         [
-            "provider",
             "chat",
             "--provider",
             "zhipu",
@@ -398,7 +390,6 @@ def test_provider_chat_accepts_image_url(monkeypatch) -> None:  # noqa: ANN001
     res = runner.invoke(
         cli.app,
         [
-            "provider",
             "chat",
             "--provider",
             "zhipu",
@@ -438,7 +429,6 @@ def test_provider_chat_accepts_data_url(monkeypatch) -> None:  # noqa: ANN001
     res = runner.invoke(
         cli.app,
         [
-            "provider",
             "chat",
             "--provider",
             "zhipu",

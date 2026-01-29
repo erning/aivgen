@@ -17,10 +17,8 @@ from aivgen.providers.registry import build_provider
 
 app = typer.Typer(no_args_is_help=True)
 config_app = typer.Typer(no_args_is_help=True)
-provider_app = typer.Typer(no_args_is_help=True)
 
 app.add_typer(config_app, name="config")
-app.add_typer(provider_app, name="provider")
 
 console = Console()
 trace_console = Console(stderr=True)
@@ -51,8 +49,8 @@ def config_show(
     console.print(json.dumps(data, indent=2, sort_keys=True))
 
 
-@provider_app.command("list")
-def provider_list(
+@app.command("providers")
+def providers_list(
     config_path: str | None = typer.Option(
         None, "--config", help="Path to a YAML config file."
     ),
@@ -66,8 +64,8 @@ def provider_list(
         typer.echo(name)
 
 
-@provider_app.command("chat")
-def provider_chat(
+@app.command("chat")
+def chat(
     provider: str = typer.Option(..., "--provider", help="Provider name."),
     model: str = typer.Option(..., "--model", help="Model name (passed at call time)."),
     prompt: list[str] = typer.Option(
@@ -166,8 +164,8 @@ def provider_chat(
     _stream_chat_response(resp, trace=trace, reasoning=reasoning)
 
 
-@provider_app.command("models")
-def provider_models(
+@app.command("models")
+def models(
     provider: str = typer.Option(..., "--provider", help="Provider name."),
     config_path: str | None = typer.Option(
         None, "--config", help="Path to a YAML config file."

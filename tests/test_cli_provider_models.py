@@ -38,7 +38,7 @@ def test_provider_models_prints_ids_in_order(monkeypatch) -> None:  # noqa: ANN0
     monkeypatch.setattr(cli, "load_config", fake_load_config)
     monkeypatch.setattr(cli, "build_provider", fake_build_provider)
 
-    res = runner.invoke(cli.app, ["provider", "models", "--provider", "zhipu"])
+    res = runner.invoke(cli.app, ["models", "--provider", "zhipu"])
     assert res.exit_code == 0, res.stdout
     assert res.stdout.splitlines() == ["m1", "m2"]
 
@@ -56,6 +56,6 @@ def test_provider_models_errors_if_unsupported(monkeypatch) -> None:  # noqa: AN
     monkeypatch.setattr(cli, "load_config", fake_load_config)
     monkeypatch.setattr(cli, "build_provider", fake_build_provider)
 
-    res = runner.invoke(cli.app, ["provider", "models", "--provider", "x"])
+    res = runner.invoke(cli.app, ["models", "--provider", "x"])
     assert res.exit_code != 0
     assert '"ok": false' in res.stdout
