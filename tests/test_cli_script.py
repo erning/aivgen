@@ -76,7 +76,7 @@ def test_script_uses_config_defaults(monkeypatch, tmp_path: Path) -> None:  # no
     monkeypatch.setattr(cli, "load_config", fake_load_config)
     monkeypatch.setattr(cli, "build_provider", fake_build_provider)
 
-    res = runner.invoke(cli.app, ["script", "--image", str(img)])
+    res = runner.invoke(cli.app, ["script", "--image", str(img), "--no-stream"])
 
     assert res.exit_code == 0, res.stdout
     assert res.stdout.strip() == "script result"
@@ -209,7 +209,8 @@ def test_script_writes_to_file(monkeypatch, tmp_path: Path) -> None:  # noqa: AN
     monkeypatch.setattr(cli, "build_provider", fake_build_provider)
 
     res = runner.invoke(
-        cli.app, ["script", "--image", str(img), "--output", str(output_file)]
+        cli.app,
+        ["script", "--image", str(img), "--output", str(output_file), "--no-stream"],
     )
 
     assert res.exit_code == 0, res.stdout

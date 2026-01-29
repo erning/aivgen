@@ -211,6 +211,14 @@ def script(
         "--prompt",
         help="Prompt text. Supports @file and -. Repeatable.",
     ),
+    stream: bool | None = typer.Option(
+        None, "--stream/--no-stream", help="Stream output (default: true)."
+    ),
+    reasoning: bool | None = typer.Option(
+        None,
+        "--reasoning/--no-reasoning",
+        help="Print reasoning to stderr (default: true).",
+    ),
     trace: bool | None = typer.Option(
         None, "--trace/--no-trace", help="Print request/response trace."
     ),
@@ -244,6 +252,16 @@ def script(
             code=_print_error("Missing required option: --model (or set in config)")
         )
 
+    final_stream = (
+        stream
+        if stream is not None
+        else (script_cfg.stream if script_cfg is not None else True)
+    )
+    final_reasoning = (
+        reasoning
+        if reasoning is not None
+        else (script_cfg.reasoning if script_cfg is not None else True)
+    )
     final_trace = (
         trace
         if trace is not None
@@ -283,19 +301,44 @@ def script(
     if final_trace:
         _trace_request(provider=final_provider, model=final_model, messages=messages)
 
+    if not final_stream:
+        try:
+            resp = ref.provider.chat_completions(
+                model=final_model, messages=messages, stream=False
+            )
+        except Exception as e:
+            raise typer.Exit(code=_print_error(str(e))) from e
+
+        result = _extract_chat_content(resp)
+
+        if output:
+            Path(output).write_text(result, encoding="utf-8")
+        else:
+            typer.echo(result)
+        return
+
     try:
         resp = ref.provider.chat_completions(
-            model=final_model, messages=messages, stream=False
+            model=final_model, messages=messages, stream=True
         )
     except Exception as e:
         raise typer.Exit(code=_print_error(str(e))) from e
 
-    result = _extract_chat_content(resp)
-
     if output:
-        Path(output).write_text(result, encoding="utf-8")
+        chunks: list[str] = []
+        for chunk in resp:
+            if not getattr(chunk, "choices", None):
+                continue
+            choice0 = chunk.choices[0]
+            delta = getattr(choice0, "delta", None)
+            if delta is None:
+                continue
+            content_piece = getattr(delta, "content", None)
+            if isinstance(content_piece, str) and content_piece:
+                chunks.append(content_piece)
+        Path(output).write_text("".join(chunks), encoding="utf-8")
     else:
-        typer.echo(result)
+        _stream_chat_response(resp, trace=final_trace, reasoning=final_reasoning)
 
 
 def _extract_model_ids(models: object) -> list[str]:
