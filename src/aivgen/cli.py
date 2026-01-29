@@ -325,7 +325,9 @@ def script(
         raise typer.Exit(code=_print_error(str(e))) from e
 
     if output:
-        chunks: list[str] = []
+        # Collect content and reasoning separately
+        content_chunks: list[str] = []
+        reasoning_chunks: list[str] = []
         for chunk in resp:
             if not getattr(chunk, "choices", None):
                 continue
@@ -335,8 +337,18 @@ def script(
                 continue
             content_piece = getattr(delta, "content", None)
             if isinstance(content_piece, str) and content_piece:
-                chunks.append(content_piece)
-        Path(output).write_text("".join(chunks), encoding="utf-8")
+                content_chunks.append(content_piece)
+            reasoning_piece = getattr(delta, "reasoning_content", None)
+            if isinstance(reasoning_piece, str) and reasoning_piece:
+                reasoning_chunks.append(reasoning_piece)
+
+        # Write reasoning to stderr if present and enabled
+        if final_reasoning and reasoning_chunks:
+            _stderr_write("\n[thinking]\n", dim=True)
+            _stderr_write("".join(reasoning_chunks), dim=True)
+            _stderr_write("\n", dim=True)
+
+        Path(output).write_text("".join(content_chunks), encoding="utf-8")
     else:
         _stream_chat_response(resp, trace=final_trace, reasoning=final_reasoning)
 
