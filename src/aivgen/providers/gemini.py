@@ -125,19 +125,22 @@ class GeminiProvider:
 
         # Handle thinking/reasoning for Gemini 2.5+ and 3.0+
         # Gemini 3 uses thinking_level, Gemini 2.5 uses thinking_budget
+        # include_thoughts=True is required to get thinking content in response
         if "gemini-3" in model:
             thinking_config = kwargs.get("thinking_config", {})
             level = thinking_config.get("thinking_level", "MEDIUM")
             config_kwargs["thinking_config"] = types.ThinkingConfig(
                 thinking_level=getattr(
                     types.ThinkingLevel, level, types.ThinkingLevel.MEDIUM
-                )
+                ),
+                include_thoughts=True,
             )
         elif "gemini-2.5" in model:
             thinking_config = kwargs.get("thinking_config", {})
             budget = thinking_config.get("thinking_budget", 1024)
             config_kwargs["thinking_config"] = types.ThinkingConfig(
-                thinking_budget=budget
+                thinking_budget=budget,
+                include_thoughts=True,
             )
 
         config = types.GenerateContentConfig(**config_kwargs) if config_kwargs else None
@@ -185,8 +188,7 @@ class GeminiProvider:
         reasoning_content = ""
 
         for part in candidate.content.parts:
-            if hasattr(part, "thought") and part.thought:
-                # This is a thinking part
+            if getattr(part, "thought", False):
                 reasoning_content += part.text
             else:
                 content_parts.append(part.text)
@@ -243,7 +245,9 @@ class GeminiStreamIterator:
 
         if chunk.candidates and chunk.candidates[0].content.parts:
             for part in chunk.candidates[0].content.parts:
-                if hasattr(part, "thought") and part.thought:
+                # Check if this is a thinking part
+                is_thought = getattr(part, "thought", False)
+                if is_thought:
                     reasoning_content += part.text
                 else:
                     content += part.text
