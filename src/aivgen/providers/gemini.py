@@ -2,39 +2,41 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 from google import genai
 from google.genai import types
 
-from aivgen.providers.openai import ProviderError
+from aivgen.providers.contracts import ProviderCapabilities
+from aivgen.providers.errors import ProviderConfigError, ProviderRequestError
+from aivgen.providers.images import parse_data_url
 
 
 def _parse_data_url(url: str) -> tuple[str, bytes]:
     """Parse a data URL and return (mime_type, decoded_bytes)."""
-    if not url.startswith("data:"):
-        raise ValueError(f"Invalid data URL: {url[:50]}...")
+    return parse_data_url(url)
 
-    content = url[5:]
-    comma_idx = content.find(",")
-    if comma_idx == -1:
-        raise ValueError("Invalid data URL: missing comma separator")
 
-    metadata = content[:comma_idx]
-    b64_data = content[comma_idx + 1 :]
+def _fetch_https_image(url: str) -> tuple[str, bytes]:
+    import mimetypes
+    import urllib.request
 
-    parts = metadata.split(";")
-    mime_type = parts[0] if parts[0] else "application/octet-stream"
-    is_base64 = "base64" in parts
+    with urllib.request.urlopen(url) as resp:
+        data = resp.read()
+        mime_type = ""
+        try:
+            mime_type = resp.headers.get_content_type()
+        except Exception:  # noqa: BLE001
+            mime_type = ""
 
-    if is_base64:
-        import base64
+    if not mime_type or mime_type == "application/octet-stream":
+        guessed, _ = mimetypes.guess_type(url)
+        mime_type = guessed or mime_type or "application/octet-stream"
 
-        return mime_type, base64.b64decode(b64_data)
-    else:
-        from urllib.parse import unquote
+    if not mime_type.startswith("image/"):
+        raise ValueError(f"URL does not look like an image (Content-Type: {mime_type})")
 
-        return mime_type, unquote(b64_data).encode("utf-8")
+    return mime_type, data
 
 
 @dataclass(frozen=True)
@@ -48,12 +50,20 @@ class GeminiProvider:
     api_key: str
     _client: Any
 
+    capabilities: ClassVar[ProviderCapabilities] = ProviderCapabilities(
+        supports_images=True,
+        supports_tools=False,
+        supports_reasoning_stream=True,
+        supports_model_list=True,
+        supports_stream=True,
+    )
+
     @classmethod
     def from_config(cls, *, name: str, config: Mapping[str, Any]) -> GeminiProvider:
         api_key = config.get("api_key")
 
         if not isinstance(api_key, str) or not api_key:
-            raise ProviderError(f"Provider {name!r}: missing or invalid api_key")
+            raise ProviderConfigError(f"Provider {name!r}: missing or invalid api_key")
 
         client = genai.Client(api_key=api_key)
 
@@ -90,9 +100,32 @@ class GeminiProvider:
                                     data=b64_data, mime_type=mime_type
                                 )
                             )
-                        elif url.startswith("http://") or url.startswith("https://"):
-                            # URL reference - fetch and convert
+                        elif url.startswith("gs://"):
                             parts.append(types.Part.from_uri(file_uri=url))
+                        elif url.startswith(
+                            "https://generativelanguage.googleapis.com/"
+                        ):
+                            mime_hint = image_url.get("mime_type")
+                            mime_type = (
+                                str(mime_hint)
+                                if isinstance(mime_hint, str) and mime_hint
+                                else "application/octet-stream"
+                            )
+                            parts.append(
+                                types.Part.from_uri(file_uri=url, mime_type=mime_type)
+                            )
+                        elif url.startswith("http://") or url.startswith("https://"):
+                            try:
+                                mime_type, data = _fetch_https_image(url)
+                            except Exception as e:  # noqa: BLE001
+                                raise ProviderRequestError(
+                                    f"Gemini error: failed to fetch image URL: {e}",
+                                    retryable=False,
+                                    cause=e,
+                                ) from e
+                            parts.append(
+                                types.Part.from_bytes(data=data, mime_type=mime_type)
+                            )
             else:
                 parts = [types.Part(text=str(content))]
 

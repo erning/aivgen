@@ -148,6 +148,40 @@ def test_provider_chat_streams_by_default(monkeypatch) -> None:  # noqa: ANN001
     assert res.stdout.strip() == "hello"
 
 
+def test_provider_chat_no_stream(monkeypatch) -> None:  # noqa: ANN001
+    fake = _FakeProvider()
+
+    def fake_load_config(*, config_path=None, cwd=None):  # noqa: ANN001
+        return object()
+
+    def fake_build_provider(cfg, *, name: str):  # noqa: ANN001
+        class _Ref:
+            provider = fake
+
+        return _Ref()
+
+    monkeypatch.setattr(cli, "load_config", fake_load_config)
+    monkeypatch.setattr(cli, "build_provider", fake_build_provider)
+
+    res = runner.invoke(
+        cli.app,
+        [
+            "chat",
+            "--provider",
+            "zhipu",
+            "--model",
+            "glm-4",
+            "--prompt",
+            "x",
+            "--no-stream",
+        ],
+    )
+
+    assert res.exit_code == 0, res.stdout
+    assert res.stdout.strip() == "hello"
+    assert fake.seen["kwargs"]["stream"] is False
+
+
 def test_provider_chat_streaming(monkeypatch) -> None:  # noqa: ANN001
     fake = _FakeProvider()
 

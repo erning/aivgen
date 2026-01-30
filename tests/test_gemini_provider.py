@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from aivgen.providers.errors import ProviderError
 from aivgen.providers.gemini import GeminiProvider, _parse_data_url
-from aivgen.providers.openai import ProviderError
 
 
 def test_parse_data_url_base64() -> None:

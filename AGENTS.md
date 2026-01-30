@@ -20,9 +20,14 @@ CLI + config + provider plumbing for AI inference. Early-stage—keep changes sm
 │   ├── config.default.yaml     # Built-in defaults
 │   └── providers/              # Provider implementations
 │       ├── __init__.py
+│       ├── anthropic.py         # Native Anthropic provider (thinking + images)
+│       ├── contracts.py         # Provider Protocol + capability flags
+│       ├── errors.py            # Shared provider error types
 │       ├── gemini.py           # Native Gemini provider with thinking support
+│       ├── images.py            # Shared image helpers (data URL parsing)
+│       ├── ollama.py            # Native Ollama provider (local models + images)
 │       ├── registry.py         # Provider dispatch
-│       └── openai_compatible.py
+│       └── openai.py            # OpenAI-compatible provider
 ├── tests/                      # Unit tests (excluded from type checking)
 ├── pyproject.toml              # uv, ruff, pytest config
 ├── pyrightconfig.json          # basedpyright settings
@@ -36,7 +41,8 @@ CLI + config + provider plumbing for AI inference. Early-stage—keep changes sm
 | Add CLI command | `src/aivgen/cli.py` |
 | Add provider type | `src/aivgen/providers/` + `registry.py` |
 | Config loading | `src/aivgen/config.py` |
-| Provider interface | `src/aivgen/providers/openai_compatible.py` |
+| Provider interface | `src/aivgen/providers/contracts.py` |
+| Provider errors | `src/aivgen/providers/errors.py` |
 | Tests | `tests/test_*.py` |
 
 ## Config
@@ -74,8 +80,11 @@ Provider configuration is dynamic:
 - Type dispatch happens in `src/aivgen/providers/registry.py`.
 
 Supported types:
-- `openai-compatible` - Any OpenAI-compatible API
+- `openai` - OpenAI-compatible APIs
+  - Alias accepted: `openai-compatible`
 - `gemini` - Native Google Gemini (supports thinking/reasoning)
+- `anthropic` - Native Anthropic Claude (supports extended thinking)
+- `ollama` - Native Ollama SDK for local LLMs
 
 See `src/aivgen/providers/AGENTS.md` for provider implementation details.
 
@@ -86,6 +95,7 @@ Entry point: `aiv` (`pyproject.toml` → `aivgen.cli:main`)
 Commands:
 - `aiv providers` - List configured providers
 - `aiv chat --provider <p> --model <m> --prompt "..."` - Chat with model
+- `aiv chat --no-stream ...` - Disable streaming and print final output
 - `aiv models --provider <p>` - List available models
 - `aiv script --image <path> [--output <file>]` - Generate video script from image
 

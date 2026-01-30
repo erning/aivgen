@@ -13,6 +13,8 @@ Config precedence (later overrides earlier):
 Interpolation:
 - `${ENV_VAR}` will be replaced with the value of `ENV_VAR` (or `""` if unset).
 
+Note: `aiv config show` prints a warning to stderr if any `${ENV_VAR}` placeholders were unresolved.
+
 Example config (`aivgen.yaml`):
 ```yaml
 aivgen:
@@ -52,6 +54,9 @@ aiv providers
 
 # Chat with a model
 aiv chat --provider <provider> --model <model> --prompt "..."
+
+# Chat without streaming
+aiv chat --no-stream --provider <provider> --model <model> --prompt "..."
 
 # List available models
 aiv models --provider <provider>
@@ -117,6 +122,7 @@ uv run basedpyright
 ### Supported Providers
 
 - **openai** - OpenAI-compatible APIs (e.g., Zhipu, Moonshot, OpenAI)
+  - Alias accepted in config: `openai-compatible`
 - **gemini** - Native Google Gemini (supports thinking/reasoning)
 - **anthropic** - Native Anthropic Claude (supports extended thinking)
 - **ollama** - Native Ollama SDK for local LLMs (supports reasoning models like Qwen3, DeepSeek-R1)

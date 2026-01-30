@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from aivgen.config import load_config
+from aivgen.config import AivConfig, AivGenConfig, ScriptConfig, load_config
 
 
 def test_load_config_allows_missing_api_key_when_not_required(
@@ -102,3 +102,24 @@ aivgen:
     d = cfg.to_dict(redact_secrets=True)
     assert d["aivgen"]["providers"]["zhipu"]["apk_key"] != "sk-test-1234567890"
     assert "..." in d["aivgen"]["providers"]["zhipu"]["apk_key"]
+
+
+def test_to_dict_includes_script() -> None:
+    cfg = AivConfig(
+        aivgen=AivGenConfig(
+            providers={},
+            script=ScriptConfig(
+                provider="zhipu",
+                model="glm-4.6v",
+                system_prompt=["@prompts/base.md"],
+                prompt=["Write a script"],
+            ),
+        ),
+        loaded_from=(),
+    )
+
+    d = cfg.to_dict(redact_secrets=True)
+    assert d["aivgen"]["script"]["provider"] == "zhipu"
+    assert d["aivgen"]["script"]["model"] == "glm-4.6v"
+    assert d["aivgen"]["script"]["system-prompt"] == ["@prompts/base.md"]
+    assert d["aivgen"]["script"]["prompt"] == ["Write a script"]

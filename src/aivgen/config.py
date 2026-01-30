@@ -38,6 +38,7 @@ class AivGenConfig:
 class AivConfig:
     aivgen: AivGenConfig
     loaded_from: tuple[str, ...]
+    unresolved_env_vars: tuple[str, ...] = ()
 
     def to_dict(self, *, redact_secrets: bool = True) -> dict[str, Any]:
         providers: dict[str, Any] = {}
@@ -48,10 +49,21 @@ class AivConfig:
                 else dict(provider.data)
             )
 
-        return {
-            "aivgen": {"providers": {**providers}},
-            "loaded_from": list(self.loaded_from),
-        }
+        aivgen: dict[str, Any] = {"providers": {**providers}}
+        if self.aivgen.script is not None:
+            script = self.aivgen.script
+            script_out: dict[str, Any] = {}
+            if script.provider is not None:
+                script_out["provider"] = script.provider
+            if script.model is not None:
+                script_out["model"] = script.model
+            if script.system_prompt is not None:
+                script_out["system-prompt"] = list(script.system_prompt)
+            if script.prompt is not None:
+                script_out["prompt"] = list(script.prompt)
+            aivgen["script"] = script_out
+
+        return {"aivgen": aivgen, "loaded_from": list(self.loaded_from)}
 
     def to_json(self, *, redact_secrets: bool = True) -> str:
         return json.dumps(
@@ -92,6 +104,7 @@ def load_config(
         merged = _merge_dicts(merged, _load_yaml_file(explicit))
         loaded_from.append(str(explicit))
 
+    unresolved_env_vars = tuple(sorted(_find_unresolved_env_vars(merged)))
     merged = _interpolate_env_vars(merged)
 
     providers_raw = _get_path(merged, ["aivgen", "providers"])
@@ -129,6 +142,7 @@ def load_config(
     return AivConfig(
         aivgen=AivGenConfig(providers=providers, script=script_config),
         loaded_from=tuple(loaded_from),
+        unresolved_env_vars=unresolved_env_vars,
     )
 
 
@@ -190,6 +204,27 @@ def _interpolate_env_vars(value: Any) -> Any:
 
 
 _ENV_PATTERN = re.compile(r"\$\{([A-Z0-9_]+)\}")
+
+
+def _find_unresolved_env_vars(value: Any) -> set[str]:
+    if isinstance(value, dict):
+        out: set[str] = set()
+        for v in value.values():
+            out |= _find_unresolved_env_vars(v)
+        return out
+    if isinstance(value, list):
+        out2: set[str] = set()
+        for v in value:
+            out2 |= _find_unresolved_env_vars(v)
+        return out2
+    if isinstance(value, str):
+        out3: set[str] = set()
+        for m in _ENV_PATTERN.finditer(value):
+            name = m.group(1)
+            if name not in os.environ:
+                out3.add(name)
+        return out3
+    return set()
 
 
 def _expand_env_placeholders(value: str) -> str:

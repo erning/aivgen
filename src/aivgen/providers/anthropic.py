@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import base64
 import importlib
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
-from aivgen.providers.openai import ProviderError
+from aivgen.providers.contracts import ProviderCapabilities
+from aivgen.providers.errors import ProviderConfigError, ProviderRequestError
+from aivgen.providers.images import parse_data_url
 
 
 @dataclass(frozen=True)
@@ -17,6 +20,14 @@ class AnthropicProvider:
     thinking_enabled: bool
     thinking_budget: int
     _client: Any
+
+    capabilities: ClassVar[ProviderCapabilities] = ProviderCapabilities(
+        supports_images=True,
+        supports_tools=False,
+        supports_reasoning_stream=True,
+        supports_model_list=True,
+        supports_stream=True,
+    )
 
     @classmethod
     def from_config(cls, *, name: str, config: Mapping[str, Any]) -> AnthropicProvider:
@@ -36,20 +47,22 @@ class AnthropicProvider:
             if "budget_tokens" in thinking_cfg:
                 thinking_budget = thinking_cfg.get("budget_tokens", 1024)
         else:
-            raise ProviderError(f"Provider {name!r}: thinking must be a mapping")
+            raise ProviderConfigError(f"Provider {name!r}: thinking must be a mapping")
 
         if not isinstance(api_key, str) or not api_key:
-            raise ProviderError(f"Provider {name!r}: missing or invalid api_key")
+            raise ProviderConfigError(f"Provider {name!r}: missing or invalid api_key")
         if base_url is not None and (not isinstance(base_url, str) or not base_url):
-            raise ProviderError(f"Provider {name!r}: base_url must be a string")
+            raise ProviderConfigError(f"Provider {name!r}: base_url must be a string")
         if not isinstance(max_tokens, int) or max_tokens <= 0:
-            raise ProviderError(f"Provider {name!r}: max_tokens must be a positive int")
+            raise ProviderConfigError(
+                f"Provider {name!r}: max_tokens must be a positive int"
+            )
         if not isinstance(thinking_budget, int) or thinking_budget <= 0:
-            raise ProviderError(
+            raise ProviderConfigError(
                 f"Provider {name!r}: thinking.budget_tokens must be a positive int"
             )
         if thinking_budget > max_tokens:
-            raise ProviderError(
+            raise ProviderConfigError(
                 f"Provider {name!r}: thinking.budget_tokens cannot exceed max_tokens"
             )
 
@@ -58,7 +71,9 @@ class AnthropicProvider:
         client_attr = str(config.get("_client_class", "Anthropic"))
         client_cls = cast(Any, getattr(anthropic_mod, client_attr, None))
         if client_cls is None:
-            raise ProviderError(f"Provider {name!r}: anthropic SDK missing Anthropic")
+            raise ProviderConfigError(
+                f"Provider {name!r}: anthropic SDK missing Anthropic"
+            )
         client = client_cls(api_key=api_key, base_url=base_url or None)
 
         return cls(
@@ -111,8 +126,53 @@ class AnthropicProvider:
                             {"type": "text", "text": str(part.get("text", ""))}
                         )
                     elif part.get("type") == "image_url":
-                        # MVP: skip images
-                        continue
+                        image_url = part.get("image_url")
+                        if not isinstance(image_url, Mapping):
+                            raise ProviderRequestError(
+                                "Anthropic error: invalid image_url payload",
+                                retryable=False,
+                            )
+                        url = image_url.get("url")
+                        if not isinstance(url, str) or not url:
+                            raise ProviderRequestError(
+                                "Anthropic error: missing image_url.url",
+                                retryable=False,
+                            )
+
+                        if url.startswith("data:"):
+                            media_type, data = parse_data_url(url)
+                            if not media_type.startswith("image/"):
+                                msg = (
+                                    "Anthropic error: unsupported image type "
+                                    f"{media_type!r}"
+                                )
+                                raise ProviderRequestError(
+                                    msg,
+                                    retryable=False,
+                                )
+                            b64 = base64.b64encode(data).decode("ascii")
+                            blocks.append(
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": media_type,
+                                        "data": b64,
+                                    },
+                                }
+                            )
+                        elif url.startswith("http://") or url.startswith("https://"):
+                            blocks.append(
+                                {
+                                    "type": "image",
+                                    "source": {"type": "url", "url": url},
+                                }
+                            )
+                        else:
+                            raise ProviderRequestError(
+                                "Anthropic error: unsupported image_url.url format",
+                                retryable=False,
+                            )
             else:
                 blocks = [{"type": "text", "text": str(content)}]
 
@@ -137,10 +197,14 @@ class AnthropicProvider:
         system, converted_messages = self._convert_messages(messages)
         max_tokens = kwargs.get("max_tokens", self.default_max_tokens)
         if not isinstance(max_tokens, int) or max_tokens <= 0:
-            raise ProviderError("Anthropic error: max_tokens must be a positive int")
+            raise ProviderRequestError(
+                "Anthropic error: max_tokens must be a positive int",
+                retryable=False,
+            )
         if self.thinking_enabled and self.thinking_budget > max_tokens:
-            raise ProviderError(
-                "Anthropic error: thinking budget cannot exceed max_tokens"
+            raise ProviderRequestError(
+                "Anthropic error: thinking budget cannot exceed max_tokens",
+                retryable=False,
             )
 
         thinking: dict[str, Any] | None = None
@@ -167,7 +231,11 @@ class AnthropicProvider:
             )
             return self._convert_response(response)
         except Exception as e:  # noqa: BLE001
-            raise ProviderError(f"Anthropic error: {e}") from e
+            raise ProviderRequestError(
+                f"Anthropic error: {e}",
+                retryable=False,
+                cause=e,
+            ) from e
 
     def _convert_response(self, response: Any) -> dict[str, Any]:
         content = ""
@@ -230,6 +298,12 @@ class AnthropicStreamIterator:
     def __iter__(self) -> AnthropicStreamIterator:
         return self
 
+    def close(self) -> None:
+        self._close()
+
+    def __del__(self) -> None:
+        self._close()
+
     def _close(self) -> None:
         if self._closed:
             return
@@ -244,6 +318,9 @@ class AnthropicStreamIterator:
             try:
                 event = next(self._iter)
             except StopIteration:
+                self._close()
+                raise
+            except Exception:
                 self._close()
                 raise
 

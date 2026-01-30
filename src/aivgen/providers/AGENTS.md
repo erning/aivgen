@@ -7,8 +7,11 @@ Provider implementations for aivgen. New providers are added here.
 Providers are dynamically dispatched by type in `registry.py`.
 
 Supported types:
-- `openai-compatible` - OpenAI-compatible API
+- `openai` - OpenAI-compatible API
+  - Alias accepted: `openai-compatible`
 - `gemini` - Native Google Gemini API with thinking support
+- `anthropic` - Native Anthropic Claude API with thinking support
+- `ollama` - Native Ollama API for local models
 
 ## Adding a New Provider Type
 
@@ -51,7 +54,7 @@ class MyProvider:
 
 ## OpenAI Compatible Provider
 
-`openai_compatible.py` - Uses OpenAI Python SDK.
+`openai.py` - Uses OpenAI Python SDK.
 
 Required config:
 - `base_url`: string
@@ -86,4 +89,8 @@ Thinking content is returned via `reasoning_content` field in streaming response
 
 ## Error Handling
 
-Raise `ProviderError` (from `openai_compatible.py`) for validation failures. CLI catches and displays these.
+Raise shared errors from `errors.py`:
+- `ProviderConfigError` for validation failures (from_config)
+- `ProviderRequestError` for runtime request failures
+
+Providers should declare `capabilities` (see `contracts.py`) and must not silently drop unsupported features (e.g., images).

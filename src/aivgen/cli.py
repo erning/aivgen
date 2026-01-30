@@ -12,7 +12,7 @@ import typer
 from rich.console import Console
 
 from aivgen.config import ConfigError, load_config
-from aivgen.providers.openai import ProviderError
+from aivgen.providers.errors import ProviderError
 from aivgen.providers.registry import build_provider
 
 app = typer.Typer(no_args_is_help=True)
@@ -40,6 +40,10 @@ def config_show(
         cfg = load_config(config_path=config_path)
     except ConfigError as e:
         raise typer.Exit(code=_print_error(str(e))) from e
+
+    if cfg.unresolved_env_vars:
+        names = ", ".join(cfg.unresolved_env_vars)
+        typer.echo(f"warning: unresolved env vars: {names}", err=True)
 
     if as_json:
         typer.echo(cfg.to_json(redact_secrets=redact))
@@ -86,6 +90,11 @@ def chat(
         "--trace/--no-trace",
         help="Print request/response trace to stderr (redacted).",
     ),
+    stream: bool = typer.Option(
+        True,
+        "--stream/--no-stream",
+        help="Stream output (default: on).",
+    ),
     image: list[str] = typer.Option(
         [],
         "--image",
@@ -131,17 +140,36 @@ def chat(
         }
     )
 
+    caps = getattr(ref.provider, "capabilities", None)
+    if (
+        caps is not None
+        and _messages_have_images(messages)
+        and not caps.supports_images
+    ):
+        raise typer.Exit(
+            code=_print_error(f"Provider {provider!r} does not support images")
+        )
+
     if trace:
         _trace_request(provider=provider, model=model, messages=messages)
 
     try:
         resp = ref.provider.chat_completions(
-            model=model, messages=messages, stream=True
+            model=model, messages=messages, stream=stream
         )
     except Exception as e:  # noqa: BLE001
         raise typer.Exit(code=_print_error(str(e))) from e
 
-    _stream_chat_response(resp, trace=trace)
+    if stream:
+        _stream_chat_response(resp, trace=trace)
+        return
+
+    if trace:
+        r = _extract_chat_reasoning(resp)
+        if isinstance(r, str) and r:
+            _stderr_write(r + "\n", dim=True)
+
+    typer.echo(_extract_chat_content(resp))
 
 
 @app.command("models")
@@ -259,6 +287,16 @@ def script(
     content.append({"type": "image_url", "image_url": {"url": image_url}})
     messages.append({"role": "user", "content": content})
 
+    caps = getattr(ref.provider, "capabilities", None)
+    if (
+        caps is not None
+        and _messages_have_images(messages)
+        and not caps.supports_images
+    ):
+        raise typer.Exit(
+            code=_print_error(f"Provider {final_provider!r} does not support images")
+        )
+
     if final_trace:
         _trace_request(provider=final_provider, model=final_model, messages=messages)
 
@@ -357,6 +395,30 @@ def _extract_chat_content(resp: object) -> str:
     raise ValueError(
         "Unexpected provider response shape: missing choices[0].message.content"
     )
+
+
+def _extract_chat_reasoning(resp: object) -> str:
+    if hasattr(resp, "choices"):
+        try:
+            r = cast(Any, resp)
+            choice0 = r.choices[0]
+            reasoning = getattr(choice0.message, "reasoning_content", None)
+            if isinstance(reasoning, str):
+                return reasoning
+        except Exception:  # noqa: BLE001
+            pass
+
+    if isinstance(resp, dict):
+        try:
+            msg = resp["choices"][0]["message"]
+            if isinstance(msg, dict):
+                reasoning2 = msg.get("reasoning_content")
+                if isinstance(reasoning2, str):
+                    return reasoning2
+        except Exception:  # noqa: BLE001
+            pass
+
+    return ""
 
 
 def _stream_chat_response(resp: object, *, trace: bool) -> None:
@@ -483,6 +545,17 @@ def _sanitize_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
         out.append({"role": role, "content": content})
     return out
+
+
+def _messages_have_images(messages: list[dict[str, Any]]) -> bool:
+    for m in messages:
+        content = m.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "image_url":
+                return True
+    return False
 
 
 def _truncate_data_url(url: object) -> str:

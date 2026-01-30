@@ -3,9 +3,11 @@ from __future__ import annotations
 import importlib
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
-from aivgen.providers.openai import ProviderError
+from aivgen.providers.contracts import ProviderCapabilities
+from aivgen.providers.errors import ProviderConfigError, ProviderRequestError
+from aivgen.providers.images import parse_data_url
 
 
 @dataclass(frozen=True)
@@ -16,12 +18,20 @@ class OllamaProvider:
     host: str | None
     _client: Any
 
+    capabilities: ClassVar[ProviderCapabilities] = ProviderCapabilities(
+        supports_images=True,
+        supports_tools=False,
+        supports_reasoning_stream=True,
+        supports_model_list=True,
+        supports_stream=True,
+    )
+
     @classmethod
     def from_config(cls, *, name: str, config: Mapping[str, Any]) -> OllamaProvider:
         host = config.get("host")
 
         if host is not None and (not isinstance(host, str) or not host):
-            raise ProviderError(f"Provider {name!r}: host must be a string")
+            raise ProviderConfigError(f"Provider {name!r}: host must be a string")
 
         sdk_module_name = str(config.get("_sdk", "ollama"))
         ollama_mod = importlib.import_module(sdk_module_name)
@@ -29,7 +39,9 @@ class OllamaProvider:
         # Get Client class from ollama module
         client_cls = cast(Any, getattr(ollama_mod, "Client", None))
         if client_cls is None:
-            raise ProviderError(f"Provider {name!r}: ollama SDK missing Client class")
+            raise ProviderConfigError(
+                f"Provider {name!r}: ollama SDK missing Client class"
+            )
 
         # Create client with optional host
         client_kwargs: dict[str, Any] = {}
@@ -54,15 +66,57 @@ class OllamaProvider:
                 out.append({"role": role, "content": content})
             elif isinstance(content, list):
                 text_parts: list[str] = []
+                images: list[bytes] = []
                 for part in content:
                     if not isinstance(part, Mapping):
                         continue
                     if part.get("type") == "text":
                         text_parts.append(str(part.get("text", "")))
                     elif part.get("type") == "image_url":
-                        continue
+                        image_url = part.get("image_url")
+                        if not isinstance(image_url, Mapping):
+                            raise ProviderRequestError(
+                                "Ollama error: invalid image_url payload",
+                                retryable=False,
+                            )
+                        url = image_url.get("url")
+                        if not isinstance(url, str) or not url:
+                            raise ProviderRequestError(
+                                "Ollama error: missing image_url.url",
+                                retryable=False,
+                            )
+
+                        if url.startswith("data:"):
+                            mime_type, data = parse_data_url(url)
+                            if not mime_type.startswith("image/"):
+                                msg = (
+                                    "Ollama error: unsupported image type "
+                                    f"{mime_type!r}"
+                                )
+                                raise ProviderRequestError(
+                                    msg,
+                                    retryable=False,
+                                )
+                            images.append(data)
+                        elif url.startswith("http://") or url.startswith("https://"):
+                            msg = (
+                                "Ollama error: image_url.url must be a data URL "
+                                "(remote URLs are not supported)"
+                            )
+                            raise ProviderRequestError(
+                                msg,
+                                retryable=False,
+                            )
+                        else:
+                            raise ProviderRequestError(
+                                "Ollama error: unsupported image_url.url format",
+                                retryable=False,
+                            )
                 text = "\n".join(text_parts) if text_parts else ""
-                out.append({"role": role, "content": text})
+                msg_out: dict[str, Any] = {"role": role, "content": text}
+                if images:
+                    msg_out["images"] = images
+                out.append(msg_out)
             else:
                 out.append({"role": role, "content": str(content)})
 
@@ -102,8 +156,12 @@ class OllamaProvider:
 
             response = self._client.chat(stream=False, **chat_kwargs)
             return self._convert_response(response)
-        except Exception as e:
-            raise ProviderError(f"Ollama error: {e}") from e
+        except Exception as e:  # noqa: BLE001
+            raise ProviderRequestError(
+                f"Ollama error: {e}",
+                retryable=False,
+                cause=e,
+            ) from e
 
     def _convert_response(self, response: Any) -> dict[str, Any]:
         """Convert Ollama response to OpenAI-compatible format."""
@@ -151,8 +209,12 @@ class OllamaProvider:
                     for m in models
                 ]
             }
-        except Exception as e:
-            raise ProviderError(f"Ollama error: {e}") from e
+        except Exception as e:  # noqa: BLE001
+            raise ProviderRequestError(
+                f"Ollama error: {e}",
+                retryable=False,
+                cause=e,
+            ) from e
 
 
 class OllamaStreamIterator:

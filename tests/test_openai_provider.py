@@ -6,7 +6,8 @@ from typing import Any
 
 import pytest
 
-from aivgen.providers.openai import OpenAIProvider, ProviderError
+from aivgen.providers.errors import ProviderError
+from aivgen.providers.openai import OpenAIProvider
 
 
 @dataclass
